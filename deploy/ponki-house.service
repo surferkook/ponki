@@ -1,0 +1,16 @@
+[Unit]
+Description=Ponki house — the hub (souls, the record, the web UI)
+After=network.target tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=simple
+User=house
+WorkingDirectory=/home/house/ponki
+ExecStart=/home/house/ponki/.venv/bin/uvicorn hub.main:app --host 0.0.0.0 --port 8200
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=/home/house/ponki/.env
+
+[Install]
+WantedBy=multi-user.target

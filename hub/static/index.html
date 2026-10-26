@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ponki — a home for robot souls</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&family=Atkinson+Hyperlegible+Next:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Ponki, in Muse's hand: a warm paper notebook for a house of robots.
+   Cream paper, plum-brown ink, fired clay as the accent. Each robot still
+   brings its own signature colour (--me); the house chrome stays calm. */
+:root{
+  --bg:#e7e9de; --surface:#f8f7f1; --ink:#23271e; --ink-2:#4d5344;
+  --muted:#79816d; --line:#ccd0bd; --you:#23271e; --you-ink:#f4f1e6;
+  --focus:#c75b39; --bad:#b93a2e; --good:#4a7a4f; --me:#c75b39;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151812; --surface:#20241c; --ink:#eceadb;
+    --ink-2:#c9cbb8; --muted:#9aa18c; --line:#39402f;
+    --you:#eceadb; --you-ink:#151812; --focus:#e08a5f; --bad:#ff8f84;
+    --good:#8fd0a0; --me:#e08a5f; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151812; --surface:#20241c; --ink:#eceadb; --ink-2:#c9cbb8;
+  --muted:#9aa18c; --line:#39402f; --you:#eceadb; --you-ink:#151812;
+  --focus:#e08a5f; --bad:#ff8f84; --good:#8fd0a0; --me:#e08a5f;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.5 "Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,sans-serif}
+h1,h2,.display{font-family:"Fraunces",ui-rounded,system-ui,sans-serif}
+h2{font-size:20px;font-weight:700;margin:0 0 8px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border-radius:999px;border:1px solid var(--ink);
+  background:var(--ink);color:var(--bg);padding:7px 16px;font-weight:600}
+button.quiet{background:transparent;color:var(--ink);border-color:var(--line)}
+button.danger{background:transparent;color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.45;cursor:default}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:8px 11px;min-width:0}
+textarea{width:100%;min-height:130px;resize:vertical}
+:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+input:focus,select:focus,textarea:focus{border-color:var(--me);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--me) 25%,transparent)}
+.hint{font-size:13px;color:var(--muted)}
+.bad{color:var(--bad)} .good{color:var(--good)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:16px;margin:0 0 14px}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;
+  background:color-mix(in srgb,var(--me) 16%,var(--surface));border:1px solid var(--line)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+#app{display:grid;grid-template-columns:272px 1fr;height:100vh}
+/* -- sidebar -- */
+#side{border-right:1px solid var(--line);padding:20px 14px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:4px;background:var(--surface)}
+.brand{font-family:"Fraunces",serif;font-size:26px;font-weight:900;letter-spacing:-.02em;padding:0 8px}
+.liveline{padding:0 8px 10px;color:var(--muted);font-size:13px}
+.row{display:flex;gap:10px;align-items:center;padding:8px;border-radius:14px;
+  cursor:pointer;border:1px solid transparent;background:none;color:var(--ink);text-align:left;width:100%}
+.row:hover{background:color-mix(in srgb,var(--me) 8%,var(--surface))}
+.row.sel{background:color-mix(in srgb,var(--me) 10%,var(--surface));border-color:var(--line)}
+.row .nm{font-weight:600;line-height:1.25}
+.row .st{font-size:12.5px;color:var(--muted);line-height:1.3}
+.row .tx{flex:1;min-width:0}
+.face{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:"Fraunces",serif;font-weight:900;overflow:hidden;position:relative}
+.face img{width:92%;height:92%;object-fit:cover;border-radius:50%}
+.face.away{border:2px dashed var(--muted)!important;filter:grayscale(.65);opacity:.8}
+.face.gone{filter:grayscale(.85);opacity:.85}
+.disc{flex:none;width:44px;height:44px;border-radius:50%;background:var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:19px}
+.disc.dash{background:transparent;border:2px dashed var(--muted);font-weight:700}
+.sidehead{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin:14px 8px 4px}
+#foot{margin-top:auto;padding:10px 8px 0;border-top:1px solid var(--line);
+  font-size:13px;color:var(--ink-2);display:grid;gap:5px}
+.switch{background:none;border:none;color:var(--me);padding:0;font-weight:600}
+/* -- main -- */
+#main{overflow-y:auto;padding:28px 32px 48px;min-width:0}
+.wrap{max-width:860px;margin:0 auto}
+.hero{display:flex;gap:18px;align-items:center;margin:6px 0 20px}
+.hero h1{font-size:clamp(34px,6vw,56px);font-weight:900;letter-spacing:-.03em;margin:0;line-height:1.02}
+.tagbubble{position:relative;background:color-mix(in srgb,var(--me) 16%,var(--surface));
+  border:1px solid var(--line);border-radius:15px;padding:9px 14px;font-family:"Fraunces",serif;font-size:17px}
+.tabs{display:flex;gap:20px;border-bottom:1px solid var(--line);margin:0 0 18px}
+.tabs button{background:none;border:none;color:var(--ink-2);border-radius:0;padding:9px 2px;font-weight:600}
+.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 -3px var(--me)}
+/* feed */
+.feed{display:flex;flex-direction:column;gap:9px}
+.bubble{display:flex;gap:9px;align-items:flex-start;max-width:92%}
+.bubble .body{background:color-mix(in srgb,var(--rc,#888) 16%,var(--surface));
+  border:1px solid var(--line);border-radius:16px 16px 16px 5px;padding:9px 13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.bubble.you{align-self:flex-end;flex-direction:row-reverse}
+.bubble.you .body{background:var(--you);color:var(--you-ink);border-radius:16px 16px 5px 16px}
+.who{font-size:12.5px;color:var(--muted);margin-bottom:2px}
+.line{text-align:center;font-size:13px;color:var(--muted)}
+.line.left{text-align:left;font-style:italic}
+.line.bad{color:var(--bad)}
+.feed img.photo,.bodytab img.photo{max-width:420px;width:100%;border-radius:11px;cursor:zoom-in;display:block}
+.chip{display:inline-block;font-size:12.5px;color:var(--muted);border:1px dashed var(--line);
+  border-radius:8px;padding:3px 9px}
+.composer{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.composer input[type="text"]{flex:1;min-width:180px}
+.micbtn{touch-action:none;user-select:none;-webkit-user-select:none}
+.micbtn.listening{background:var(--ink);color:var(--bg);box-shadow:0 0 0 6px color-mix(in srgb,var(--me) 30%,transparent)}
+.micbtn.thinking{opacity:.6}
+/* body tab, forms, stats */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{display:flex;flex-direction:column;gap:4px;margin:0 0 9px}
+.field label{font-size:13.5px;font-weight:600}
+.result{margin-top:8px;font-size:14px;white-space:pre-wrap}
+.statepills{display:flex;gap:7px;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px}
+.tile .num{font-family:"Fraunces",serif;font-size:30px;font-weight:700}
+.chart{display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--line);padding-top:10px}
+.bar{flex:1;max-width:28px;min-width:4px;background:var(--me);border-radius:5px 5px 0 0;cursor:pointer}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);
+  border-radius:9px;padding:6px 10px;font-size:13px;display:none;z-index:60;max-width:260px}
+table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+/* dialog, build, system */
+#zoom{border:none;background:transparent;max-width:96vw;max-height:94vh;padding:0}
+#zoom::backdrop{background:rgba(0,0,0,.72)}
+#zoom img{max-width:96vw;max-height:88vh;object-fit:contain;border-radius:13px;display:block}
+#zoomdel{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;
+  background:rgba(20,18,14,.78);color:#fff;border-color:transparent;backdrop-filter:blur(4px)}
+#zoomdel:hover{background:var(--bad)}
+.stepnum{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.stepnum.cur{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.stepnum.done{border-color:var(--good);background:var(--good);color:#fff}
+.logbox{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;white-space:pre-wrap;
+  overflow-y:auto;max-height:460px;background:var(--surface);border:1px solid var(--line);
+  border-radius:13px;padding:12px}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.18) rotate(-4deg)}100%{transform:scale(1)}}
+.face.pop{animation:pop .5s ease}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.face.speaking{animation:pulse 1s ease infinite}
+@media (prefers-reduced-motion: reduce){
+  .face.pop,.face.speaking,.micbtn.listening{animation:none!important;box-shadow:none}
+}
+@media (max-width:760px){
+  #app{grid-template-columns:1fr;height:auto}
+  #side{flex-direction:row;overflow-x:auto;overflow-y:hidden;align-items:flex-start;
+    border-right:none;border-bottom:1px solid var(--line);padding:12px}
+  #side .row{flex-direction:column;width:auto;text-align:center;gap:4px}
+  #side .st,#foot,.liveline{display:none}
+  .brand{font-size:21px;padding-top:8px}
+  #main{overflow:visible;padding:18px 16px 40px}
+  .grid2{grid-template-columns:1fr}
+  .hero h1{font-size:36px}
+}
+/* --CHUNK2-- */
+</style>
+</head>
+<body>
+<div id="app">
+  <nav id="side" aria-label="Residents"></nav>
+  <main id="main"></main>
+</div>
+<dialog id="zoom"><img alt=""><button id="zoomdel" type="button">Delete photo</button></dialog>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const S={info:null,robots:[],events:[],floor:[],departed:[],settings:{},mic:{},system:null,
+  voices:[],grounding:{},builds:[],workshops:[],families:[],
+  sel:store.get("ponki.sel","house"),tab:store.get("ponki.tab","talk"),
+  hear:store.get("ponki.hear",false),showFloor:store.get("ponki.floor",false),
+  buildId:null,logSource:"events",results:{},loadedUi:0,audioQ:[],playing:false};
+const PALETTE=["#4a6cf7","#e0457b","#16a085","#f39c12","#8e44ad","#2d9cdb"];
+function colorOf(r){ if(r&&/^#[0-9a-f]{6}$/i.test(r.color||""))return r.color;
+  const id=(r&&r.name)||"?"; let h=0; for(const c of id)h=(h*31+c.charCodeAt(0))>>>0; return PALETTE[h%6]; }
+function byId(id){return S.robots.find(r=>r.name===id)}
+function disp(r){return r?((r.display_name)|| (r.name?r.name[0].toUpperCase()+r.name.slice(1):"")):""}
+function clock(t){const d=new Date(t*1000);return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}
+function fullDate(t){return new Date(t*1000).toLocaleString()}
+function ago(t){if(!t)return"";const s=Math.max(0,Date.now()/1000-t);
+  if(s<90)return"just now"; if(s<3600)return Math.round(s/60)+" min ago";
+  if(s<86400)return Math.round(s/3600)+" h ago"; return Math.round(s/86400)+" d ago"}
+function dayLong(t){return new Date(t*1000).toLocaleDateString([], {day:"numeric",month:"long",year:"numeric"})}
+async function api(path,opts){const res=await fetch(path,opts);
+  if(!res.ok){let d=res.statusText;try{d=(await res.json()).detail||d}catch(e){} throw new Error(d)}
+  const ct=res.headers.get("content-type")||""; return ct.includes("json")?res.json():res}
+function post(path,body){return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})}
+function faceHTML(r,size,extra){const c=colorOf(r),n=disp(r)||"?";
+  const cls=r&&r._gone?"gone":(r&&!r.online?"away":"");
+  const inner=r&&r.portrait?`<img src="${esc(r.portrait)}" alt="">`:`<span style="color:${c}">${esc(n[0]||"?")}</span>`;
+  return `<span class="face ${cls} ${extra||""}" data-face="${esc(r?r.name:"")}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.42)}px;border:2px solid ${c};background:${c}38">${inner}</span>`}
+function houseFace(size){return `<span class="disc" style="width:${size}px;height:${size}px" aria-hidden="true">⌂</span>`}
+function renderSidebar(){
+  const home=S.robots.filter(r=>r.online).length;
+  const unfinished=S.builds.find(b=>!b.finished);
+  const won=S.workshops.filter(w=>w.online).length;
+  const sysBad=S.system?Object.values(S.system.services||{}).filter(v=>!v.ready).length
+    +S.workshops.filter(w=>!w.online).length:0;
+  let h=`<div class="brand">Ponki</div><div class="liveline">${S.robots.length?`${home} of ${S.robots.length} robots home`:"No robots yet"}</div>`;
+  h+=`<button class="row ${S.sel==="house"?"sel":""}" data-sel="house">${houseFace(44)}<span class="tx"><span class="nm">The house</span><br><span class="st">Everything, everyone</span></span></button>`;
+  for(const r of [...S.robots].sort((a,b)=>a.name<b.name?-1:1)){
+    const st=r.online?["home",...Object.entries(r.state||{}).map(([k,v])=>k==="pose"?`in ${v}`:`${k} ${typeof v==="object"?JSON.stringify(v):v}`)].join(", "):"away";
+    h+=`<button class="row ${S.sel===r.name?"sel":""}" data-sel="${esc(r.name)}">${faceHTML(r,44)}<span class="tx"><span class="nm">${esc(disp(r))}</span><br><span class="st">${esc(st)}</span></span></button>`}
+  h+=`<button class="row ${S.sel==="add"?"sel":""}" data-sel="add"><span class="disc dash">+</span><span class="tx"><span class="nm">Add a robot</span><br><span class="st">${unfinished?"Building "+esc(unfinished.name||"a robot")+"…":won?won+" workshop"+(won>1?"s":"")+" ready":"No workshop online"}</span></span></button>`;
+  h+=`<button class="row ${S.sel==="system"?"sel":""}" data-sel="system"><span class="disc" aria-hidden="true">⚙</span><span class="tx"><span class="nm">System</span><br><span class="st">${sysBad?sysBad+" things need a look":"All running"}</span></span></button>`;
+  if(S.departed.length){h+=`<div class="sidehead">Moved on</div>`;
+    const seen=new Set();
+    for(const e of S.departed){if(seen.has(e.name))continue;seen.add(e.name);
+      h+=`<button class="row ${S.sel==="~"+e.id?"sel":""}" data-sel="~${esc(e.id)}">${faceHTML({name:e.name,display_name:e.display_name,color:e.color,portrait:e.portrait?("/api/departed/"+encodeURIComponent(e.id)+"/portrait.webp"):null,online:true,_gone:true},44)}<span class="tx"><span class="nm">${esc(e.display_name||e.name)}</span><br><span class="st">moved on ${esc(dayLong(e.departed))}</span></span></button>`}}
+  const spent=S.robots.reduce((a,r)=>a+((r.usage&&r.usage.usd)||0),0);
+  h+=`<div id="foot"><span>Brain — ${esc(S.info?S.info.model:"")}</span>
+    <span>Hear it here — <button class="switch" id="hearsw" type="button">${S.hear?"on":"off"}</button></span>
+    <span>Spent so far — ${spent?"$"+spent.toFixed(2):"–"}</span></div>`;
+  $("#side").innerHTML=h;
+  $$("#side [data-sel]").forEach(b=>b.onclick=()=>{select(b.dataset.sel)});
+  const hs=$("#hearsw"); if(hs)hs.onclick=()=>{S.hear=!S.hear;store.set("ponki.hear",S.hear);
+    if(!S.hear){S.audioQ=[]} renderSidebar()};
+}
+function select(sel){S.sel=sel;store.set("ponki.sel",sel);
+  if(sel.startsWith("~")||["house","add","system"].includes(sel))document.documentElement.style.setProperty("--me","#c75b39");
+  render()}
+function robotOfSel(){return byId(S.sel)}
+function relevant(e,rid){return e.robot===rid||e.to===rid||e.frm===rid}
+const NONFEED=["build","voice","voice_changed","settings","fixture_online","fixture_offline","state","painting","equipment_renamed","equipment_removed"];
+function photoTag(url,cls){if(!url)return `<span class="chip">photo deleted</span>`;
+  return `<img class="photo ${cls||""}" src="${esc(url)}" alt="" data-zoom="${esc(url)}">`}
+function bubble(e,who,inner,robot,you){
+  return `<div class="bubble ${you?"you":""}" style="--rc:${esc(robot?colorOf(robot):"#888")}">
+    ${robot?faceHTML(robot,30):""}<div><div class="who">${esc(who)} · <span title="${esc(fullDate(e.t))}">${esc(clock(e.t))}</span></div>
+    <div class="body">${inner}</div></div></div>`}
+function line(e,text,bad,left){return `<div class="line ${bad?"bad":""} ${left?"left":""}" title="${esc(fullDate(e.t))}">${text}</div>`}
+function feedHTML(e,ctx){
+  const r=byId(e.robot), n=r?disp(r):(e.robot||""), human=S.info?S.info.human:"you";
+  switch(e.kind){
+    case "heard": return bubble(e,`${human}${ctx==="house"&&e.robot?" to "+n:""}${e.via?" · said out loud":""}`,esc(e.text),null,true);
+    case "unheard": return line(e,`Heard “${esc(e.text||"")}”, but not for anyone (no robot's name in it)`);
+    case "say": {const to=e.to&&e.to!=="human"&&e.to!=="event"?byId(e.to):null;
+      return bubble(e,to?`${n} to ${disp(to)}`:n,esc(e.text),r)}
+    case "ask": {const to=byId(e.to); return bubble(e,`${n} asks ${to?disp(to):e.to}`,esc(e.text),r)}
+    case "thought": return line(e,`${esc(n)} is thinking: ${esc(e.text||"")}`,false,true);
+    case "act": {const man=r?r.actions||{}:{}; if(r&&r.voice&&Object.keys(man).length&&e.action===r.voice)return"";
+      const vals=Object.values(e.args||{}).join(" "); return line(e,`${esc(n)} ▸ ${esc(e.action)} ${esc(vals)}`)}
+    case "act_failed": return line(e,`${esc(n)} couldn't ${esc(e.action)}: ${esc(e.text||"")}`,true);
+    case "error": return line(e,`${esc(n)}: ${esc(e.text||"")}`,true);
+    case "saw": return bubble(e,`${n} looked`,photoTag(e.image),r);
+    case "locating": return line(e,`${esc(n)} is searching for “${esc(e.what||"")}”…`);
+    case "located": {const c=(e.found||[]).length;
+      return bubble(e,`${n} ${c?`found ${c} ${esc(e.what||"")}${c>1?"s":""}`:`no ${esc(e.what||"")}`} · ${e.ms?Math.round(e.ms/100)/10+" s":""}`,
+        `${photoTag(e.image)}<div>${esc(e.text||"")}</div>`,r)}
+    case "watching": return line(e,`${esc(n)} is watching “${esc(e.what||"")}” for ${esc(e.seconds||"")} s…`);
+    case "watched": {let inner=photoTag(e.image);
+      if(e.video)inner+=`<video src="${esc(e.video)}" controls muted loop playsinline preload="metadata" style="max-width:420px;width:100%;background:#000;border-radius:11px"></video>`;
+      if(e.gif)inner+=`<img class="photo" src="${esc(e.gif)}" alt="" data-zoom="${esc(e.gif)}" style="max-width:300px;background:#fff">`;
+      if(e.gif)inner+=`<div><a href="${esc(e.gif)}" download>Save GIF</a></div>`;
+      if(e.video)inner+=`<div><a href="${esc(e.video)}" download>Save video</a></div>`;
+      return bubble(e,`${n} watched ${esc(e.what||"")} · ${e.moved?"it moved":"still"} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,inner,r)}
+    case "drawing": return line(e,`${esc(n)} is drawing for ${esc(e.for||human)}: ${esc(e.what||"")}…`);
+    case "drew": return bubble(e,`${n} drew this for ${esc(e.for||human)} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,
+        e.image?photoTag(e.image):`<span class="chip">drawing deleted</span>`,r);
+    case "looking_up": return line(e,`${esc(n)} is looking up “${esc(e.what||e.text||"")}”…`);
+    case "looked_up": {let links=(e.sources||[]).filter(s=>/^https?:\/\//.test(s.url||""))
+        .map(s=>`<div><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||s.url)}</a></div>`).join("");
+      return bubble(e,`${n} looked up “${esc(e.what||"")}” · ${e.ms?Math.round(e.ms/100)/10+" s":""}`,`<div>${esc(e.text||"")}</div>${links}`,r)}
+    case "watch_media": {let inner="";
+      if(e.video)inner+=`<video src="${esc(e.video)}" controls muted loop playsinline preload="metadata" style="max-width:420px;width:100%;background:#000;border-radius:11px"></video>`;
+      if(e.gif)inner+=`<img class="photo" src="${esc(e.gif)}" alt="" data-zoom="${esc(e.gif)}" style="max-width:300px;background:#fff">`;
+      if(e.gif)inner+=`<div><a href="${esc(e.gif)}" download>Save GIF</a></div>`;
+      if(e.video)inner+=`<div><a href="${esc(e.video)}" download>Save video</a></div>`;
+      return bubble(e,`${n}'s clip of ${esc(e.what||"")} is ready`,inner,r)}
+    case "noticed": return line(e,`${esc(n)} noticed: ${esc(e.text||"")}${e.staged?" (staged)":""}`);
+    case "overheard": return line(e,e.promise?`${esc(n)} overheard ${esc(disp(byId(e.frm))||e.frm||"")}: a moment it promised to mark`
+      :`${esc(n)} overheard ${esc(disp(byId(e.frm))||e.frm||"")}`);
+    case "promise": return line(e,e.dropped?`${esc(n)} let a promise go: ${esc(e.text||"")}`:`${esc(n)} promised: ${esc(e.text||"")}`);
+    case "floor": return S.showFloor?line(e,`The floor: ${e.react?esc(disp(byId(e.react))||e.react)+" reacts":"nobody reacts"} — ${esc(e.why||"")}`,false,true):"";
+    case "log": return line(e,`${esc(n)}: ${esc(e.text||"")}`);
+    case "online": return line(e,`${esc(n)} came home`);
+    case "offline": return line(e,`${esc(n)} went away`);
+    case "born": return line(e,`${esc(n)} got a soul`);
+    case "painted": return line(e,`${esc(n)} has a new portrait`);
+    case "soul_edited": return line(e,`${esc(n)}'s persona was rewritten`);
+    case "reset": return line(e,e.forget?`${esc(n)} forgot everything and started fresh`:`${esc(n)} started a fresh conversation`);
+    case "renamed": return line(e,`${esc(e.old||"")} is now called ${esc(e.display_name||"")}`);
+    case "moved_on": return line(e,`${esc(e.display_name||n)} moved on. Remembered, always with us`);
+    case "came_back": return line(e,`${esc(e.display_name||n)} came back home`);
+    case "removed": return line(e,`${esc(n)} was taken out of the house`);
+    case "photo_deleted": return line(e,`${esc(n)}'s photo #${esc(e.n)} was deleted`);
+    default: return "";
+  }
+}
+function feedList(events,ctx){
+  // hide offline->online pairs within 90 s (a restart isn't news)
+  const hidden=new Set();
+  events.forEach((e,i)=>{if(e.kind!=="offline")return;
+    const j=events.findIndex((x,k)=>k>i&&x.kind==="online"&&x.robot===e.robot&&x.t-e.t<90);
+    if(j>=0){hidden.add(i);hidden.add(j)}});
+  const html=events.map((e,i)=>hidden.has(i)?"":feedHTML(e,ctx)).filter(Boolean).join("");
+  return html||`<p class="hint">${ctx==="house"?"Quiet in here. Start a robot's body and it will show up.":"Nothing yet."}</p>`;
+}
+function wireZoom(root){
+  root.querySelectorAll("[data-zoom]").forEach(img=>img.onclick=()=>openZoom(img.dataset.zoom));
+}
+function openZoom(url){const d=$("#zoom");d.querySelector("img").src=url;
+  const del=$("#zoomdel"); const m=String(url).match(/\/api\/robots\/([^/]+)\/seen\/(\d+)\.(jpg|gif)/);
+  del.style.display=m?"":"none"; del.onclick=async()=>{ if(!m)return;
+    if(!confirm("Delete this photo for good? It's removed from the house: the photo itself (and a watch's GIF and video), every robot's conversation that still carries it, and the feed. Copies already sent to Meta (Muse, SAM) can't be recalled from here; their API data policies apply."))return;
+    try{await api(`/api/robots/${encodeURIComponent(m[1])}/seen/${m[2]}`,{method:"DELETE"});d.close()}catch(e){alert(e.message)}};
+  d.onclick=()=>d.close(); if(!d.open)d.showModal();
+}
+function micButtonHTML(id){const has=S.mic&&S.mic.house_mic;
+  return `<button type="button" class="micbtn quiet" id="${id}" ${has?"":"disabled"}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+    <span>Hold to talk</span></button>`}
+function wireMic(btn,to,noteEl){
+  if(!btn)return; let active=false;
+  const start=async ev=>{if(active)return; if(ev.type==="keydown"&&(ev.repeat||![" ","Enter"].includes(ev.key)))return;
+    active=true; btn.classList.add("listening"); btn.querySelector("span").textContent="Listening…";
+    try{await post("/api/mic/start")}catch(e){note(e.message)}};
+  const stop=async()=>{if(!active)return; active=false;
+    btn.classList.remove("listening"); btn.classList.add("thinking"); btn.querySelector("span").textContent="…";
+    try{const r=await post("/api/mic/stop",{to:to||null});
+      if(!r.text)note("Didn't catch that. Hold the button while you talk.");
+      else if(!r.to)note(`Heard “${r.text}”, but not for anyone. Say a robot's name.`)}
+    catch(e){note(e.message)}
+    btn.classList.remove("thinking"); btn.querySelector("span").textContent="Hold to talk"};
+  const note=t=>{if(noteEl){const old=noteEl.placeholder||noteEl.textContent;
+    if(noteEl.tagName==="INPUT"){noteEl.placeholder=t;setTimeout(()=>noteEl.placeholder=old,4000)}
+    else noteEl.textContent=t}};
+  btn.addEventListener("pointerdown",start); btn.addEventListener("keydown",start);
+  document.addEventListener("pointerup",stop); document.addEventListener("pointercancel",stop);
+  btn.addEventListener("keyup",stop);
+}
+function viewHouse(){
+  document.documentElement.style.setProperty("--me","#c75b39");
+  const hasMic=S.mic&&S.mic.house_mic;
+  $("#main").innerHTML=`<div class="wrap"><div class="hero">${houseFace(72)}<div>
+    <h1>The house</h1><p class="hint">Every robot, every conversation, as it happens.</p></div></div>
+    <label class="hint"><input type="checkbox" id="floorsw" ${S.showFloor?"checked":""}> Show the floor</label>
+    <div class="feed" id="feed">${feedList(S.events,"house")}</div>
+    <div class="composer">${micButtonHTML("micbtn")}
+    <span class="hint" id="michint">${hasMic?`Hold to talk, and say a robot's name: “Keiki, where's the orange?”`:"No house mic is online."}</span></div></div>`;
+  wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint"));
+  const fs=$("#floorsw"); if(fs)fs.onchange=()=>{S.showFloor=fs.checked;store.set("ponki.floor",S.showFloor);render()};
+  const f=$("#feed"); if(f)f.scrollTop=f.scrollHeight;
+}
+function heroHTML(r){
+  const st=r.online?`home${r.state&&r.state.pose?", in "+esc(r.state.pose):""} · connected ${ago(r.since)}`
+    :"Away — its body isn't connected right now";
+  return `<div class="hero">${faceHTML(r,112)}<div><h1>${esc(disp(r))}</h1>
+    ${r.tagline?`<span class="tagbubble">“${esc(r.tagline)}”</span>`:""}
+    <p class="hint">${esc(st)}</p></div></div>
+    <div class="tabs" role="tablist">${["talk","body","soul","stats"].map(t=>
+      `<button role="tab" aria-selected="${S.tab===t}" data-tab="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join("")}</div>`;
+}
+function viewRobot(){
+  const r=robotOfSel(); if(!r){viewHouse();return}
+  document.documentElement.style.setProperty("--me",colorOf(r));
+  let body="";
+  if(S.tab==="talk")body=talkHTML(r); else if(S.tab==="body")body=bodyHTML(r);
+  else if(S.tab==="soul")body=soulHTML(r); else body=statsHTML(r);
+  $("#main").innerHTML=`<div class="wrap">${heroHTML(r)}<div id="panel">${body}</div></div>`;
+  $$("#main [data-tab]").forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;store.set("ponki.tab",S.tab);viewRobot()});
+  wireZoom($("#main"));
+  if(S.tab==="talk")wireTalk(r); if(S.tab==="body")wireBody(r);
+  if(S.tab==="soul")wireSoul(r); if(S.tab==="stats")wireStats(r);
+}
+function talkHTML(r){
+  const evs=S.events.filter(e=>relevant(e,r.name));
+  return `<div class="feed" id="feed">${evs.length?feedList(evs,"talk"):`<p class="hint">Nothing yet. Say hi to ${esc(disp(r))}.</p>`}</div>
+  <form class="composer" id="talkform"><input type="text" id="talktext" placeholder="Say something to ${esc(disp(r))}…" autocomplete="off">
+  ${micButtonHTML("micbtn")}<button type="submit" id="sendbtn">Send</button></form>
+  <p class="hint bad" id="talkerr"></p>`;
+}
+function wireTalk(r){
+  const f=$("#talkform"),input=$("#talktext");
+  wireMic($("#micbtn"),r.name,input);
+  f.onsubmit=async ev=>{ev.preventDefault();const text=input.value.trim(); if(!text)return;
+    input.value=""; const btn=$("#sendbtn"); btn.disabled=true;
+    try{await post(`/api/robots/${encodeURIComponent(r.name)}/chat`,{text})}
+    catch(e){$("#talkerr").textContent=e.message}
+    btn.disabled=false; input.focus()};
+  const feed=$("#feed"); if(feed)feed.scrollTop=feed.scrollHeight;
+}
+function schemaFields(actionName,schema){
+  const props=(schema&&schema.properties)||{}, req=new Set((schema&&schema.required)||[]);
+  return Object.entries(props).map(([name,p])=>{
+    const label=`${esc(name)}${req.has(name)?"":" (optional)"}`;
+    let input="";
+    if(Array.isArray(p.enum))input=`<select name="${esc(name)}">${p.enum.map(v=>`<option>${esc(v)}</option>`).join("")}</select>`;
+    else if(p.type==="integer"||p.type==="number"){const min=p.minimum??"",max=p.maximum??"";
+      input=`<input type="number" name="${esc(name)}" min="${min}" max="${max}" step="${p.type==="integer"?1:"any"}" value="${min!==""?min:""}">`}
+    else if(p.type==="boolean")input=`<input type="checkbox" name="${esc(name)}">`;
+    else input=`<input type="text" name="${esc(name)}" ${req.has(name)?"required":""}>`;
+    return `<div class="field"><label>${label}</label>${input}</div>`}).join("");
+}
+function collectArgs(form,schema){
+  const props=(schema&&schema.properties)||{}, req=new Set((schema&&schema.required)||{}), args={};
+  for(const [name,p] of Object.entries(props)){const el=form.elements[name]; if(!el)continue;
+    if(p.type==="boolean"){args[name]=el.checked; continue}
+    const v=el.value; if(v===""&&!req.has(name))continue;
+    args[name]=(p.type==="integer")?parseInt(v,10):(p.type==="number")?parseFloat(v):v}
+  return args;
+}
+function bodyHTML(r){
+  const acts=Object.entries(r.actions||{});
+  let h=`<div class="bodytab">`;
+  if(!r.online)h+=`<p class="pill">${esc(disp(r))} is away. Actions will fail until its body reconnects.</p>`;
+  if(r.camera){const found=S.events.filter(e=>e.kind==="located"&&e.robot===r.name).slice(-1)[0];
+    h+=`<div class="card"><h2>What it sees</h2>
+      ${r.seen?`<img class="photo" src="${esc(r.seen)}" data-zoom="${esc(r.seen)}" alt="">`:`<p class="hint">No photo yet</p>`}
+      <div class="composer"><button type="button" id="takephoto">Take a photo</button></div>
+      <form class="composer" id="findform"><input type="text" id="findtext" placeholder="plant, red mug, person…">
+      <button type="submit">Find</button></form><p class="hint" id="findmsg">Find marks every match of a thing's name in a fresh photo (SAM 3.1). A question goes to ${esc(disp(r))} instead, who answers in Talk.</p>
+      ${S.grounding&&!S.grounding.ready?`<p class="hint">The object finder is not running (or: waiting for model access), so Find won't work yet.</p>`:""}
+      ${found?`<p>${(found.found||[]).map((f,i)=>`#${i+1} ${esc(found.what||"")} at x ${f.x??""}, y ${f.y??""} · ${f.area??""}% of view · ${f.score??""}`).join("<br>")}</p>`:""}
+      </div>`}
+  const st=Object.entries(r.state||{});
+  h+=`<div class="card"><h2>State</h2>${st.length?`<div class="statepills">${st.map(([k,v])=>
+    `<span class="pill">${esc(k)}: ${esc(typeof v==="object"?JSON.stringify(v):v)}</span>`).join("")}</div>`
+    :`<p class="hint">This body doesn't report any state.</p>`}</div>`;
+  h+=`<h2>Try its actions</h2><p class="hint">Runs the body directly, without the brain.</p>`;
+  for(const [name,a] of acts){
+    const first=((a.description||"").split(". ")[0]||"")+(a.description&&!String(a.description).endsWith(".")?".":"");
+    h+=`<div class="card"><h2 class="display" style="font-size:17px">${esc(name)}${r.voice===name?" (its voice)":""}</h2>
+      <p class="hint">${esc(first)}</p><form data-action="${esc(name)}">${schemaFields(name,a.params)}
+      <button type="submit">Run</button><span class="result" data-result="${esc(name)}">${esc(S.results[r.name+":"+name]||"")}</span></form></div>`}
+  return h+`</div>`;
+}
+function wireBody(r){
+  const take=$("#takephoto");
+  if(take)take.onclick=async()=>{try{await post(`/api/robots/${encodeURIComponent(r.name)}/act`,{action:r.camera,args:{}})}catch(e){alert(e.message)}};
+  const ff=$("#findform");
+  if(ff)ff.onsubmit=async ev=>{ev.preventDefault();const text=$("#findtext").value.trim(); if(!text)return;
+    const q=/\?$/.test(text)||/^(how|where|what|which|who|is|are|can|could|do|does|did|count|find|show|tell)\b/i.test(text)||text.split(/\s+/).length>5;
+    if(q){S.tab="talk";store.set("ponki.tab","talk");viewRobot();
+      const input=$("#talktext"); if(input){input.value=text; $("#talkform").requestSubmit()} return}
+    $("#findmsg").textContent="Searching…";
+    try{const res=await post(`/api/robots/${encodeURIComponent(r.name)}/locate`,{what:text});
+      $("#findmsg").textContent=String(res.text||"").split("\n")[0];
+      $("#findmsg").className=res.ok?"hint good":"hint bad"}
+    catch(e){$("#findmsg").textContent=e.message;$("#findmsg").className="hint bad"}};
+  $$("#main form[data-action]").forEach(form=>{
+    form.onsubmit=async ev=>{ev.preventDefault();const name=form.dataset.action;
+      const schema=(r.actions[name]||{}).params; const args=collectArgs(form,schema);
+      const slot=form.querySelector("[data-result]"); slot.textContent="Running…";
+      try{const res=await post(`/api/robots/${encodeURIComponent(r.name)}/act`,{action:name,args});
+        slot.textContent=res.text||""; slot.className="result "+(res.ok?"good":"bad");
+        S.results[r.name+":"+name]=slot.textContent}
+      catch(e){slot.textContent=e.message;slot.className="result bad"}}});
+}
+function soulHTML(r){
+  const ownVoice=r.voice&&r.voice_style!=="chirps";
+  const hv=r.house_voice||{};
+  const mem=[...(r.journal||[])].reverse();
+  let h=`<div class="card"><h2>Name</h2><form id="renameform" class="composer">
+    <input type="text" id="rename" maxlength="40" value="${esc(disp(r))}"><button>Rename</button></form>
+    <p class="hint" id="renamemsg">The housemates are told; memories stay.</p></div>`;
+  h+=`<div class="card"><h2>Who ${esc(disp(r))} is</h2>
+    <textarea id="persona">${esc(r.persona||"")}</textarea>
+    <div class="composer"><button type="button" id="savepersona">Save persona</button></div>
+    <p class="hint" id="personamsg">Saving starts a fresh conversation. Memories carry over.</p></div>`;
+  h+=`<div class="card"><h2>Portrait</h2><div class="hero" style="margin:0">${faceHTML(r,96)}
+    <div><p>“${esc(r.tagline||"No tagline yet.")}”</p>
+    <p class="hint">Colour ${esc(colorOf(r))} · drawn by the brain · painted by Muse Image ${r.portrait?"":"(not yet)"}</p>
+    <button type="button" id="drawbtn" ${r.painting?"disabled":""}>${r.painting?"Drawing…":(r.portrait?"Draw a new portrait":"Draw a portrait")}</button>
+    <span class="hint bad" id="drawmsg"></span></div></div></div>`;
+  h+=`<div class="card"><h2>Voice</h2>`;
+  if(ownVoice)h+=`<p>${esc(disp(r))} speaks through its own body, with its own voice.</p>`;
+  else{h+=`<p class="hint">${r.voice?"Its body chirps; the house speakers say the words.":"It has no speaker, so the house speakers talk for it."}</p>
+    <form id="voiceform"><div class="field"><label>Voice</label>
+    <select id="voiceid">${S.voices.map(v=>`<option value="${esc(v.id)}" ${hv.id===v.id?"selected":""}>${esc(v.label)}</option>`).join("")}</select></div>
+    <div class="field"><label>Pitch <span id="pitchval">${hv.pitch??1}</span></label>
+    <input type="range" id="pitch" min="0.7" max="1.6" step="0.05" value="${hv.pitch??1}"></div>
+    <p class="hint">higher = a smaller robot, below 1 = deeper</p>
+    <div class="field"><label>Speed <span id="speedval">${hv.speed??1}</span></label>
+    <input type="range" id="speed" min="0.6" max="1.6" step="0.05" value="${hv.speed??1}"></div>
+    <div class="composer"><button type="button" id="listen">Listen</button>
+    <button type="button" id="keepvoice">Keep this voice</button><span class="hint" id="voicemsg"></span></div></form>`}
+  h+=`</div>`;
+  h+=`<div class="card"><h2>Promises and habits</h2>
+    <p class="hint">Standing promises ${esc(disp(r))} made (asked with words, kept with its promise tool) and habits of its own. The house gives them their moments, even while others are talking.</p>
+    ${(r.promises||[]).length?(r.promises||[]).map((p,i)=>`<div class="card"><p>${esc(typeof p==="string"?p:(p.text||JSON.stringify(p)))}</p>
+      <button type="button" class="quiet" data-letgo="${i+1}">Let go</button></div>`).join("")
+      :`<p class="hint">None yet. Ask, e.g. “Buddy, whenever a housemate finishes a task, celebrate it.”</p>`}</div>`;
+  h+=`<div class="card"><h2>Memories</h2>
+    <p class="hint">What it remembers across conversations: the last ${(r.journal||[]).length} exchanges. Its working conversation has ${r.conversation_len||0} messages.</p>
+    ${mem.map(m=>{const from=typeof m==="string"?"":(m.from||""); const inp=typeof m==="string"?m:(m.input||m.text||"");
+      const out=typeof m==="string"?"":(m.reply||m.output||"");
+      return `<div class="card"><p class="who">${esc(from?disp(byId(from))||from:"something happened")} · ${m.t?ago(m.t):""}</p>
+      <p>${esc(inp)}</p>${out?`<p style="color:var(--ink-2)">${esc(disp(r))}: ${esc(out)}</p>`:""}</div>`}).join("")}
+    <div class="composer"><button type="button" class="quiet" id="fresh">Start a fresh conversation</button>
+    <button type="button" class="danger" id="forgetall">Forget everything</button></div>
+    <p class="hint">A fresh conversation keeps its memories. Forget everything also wipes them; the persona stays.</p>
+    <p class="hint bad" id="resetmsg"></p></div>`;
+  h+=`<div class="card"><h2>Say goodbye</h2>
+    <p>When ${esc(disp(r))}'s body is retired for good, ${esc(disp(r))} moves on. The persona, memories, portrait and photos are kept, under “Moved on”, and every housemate is told their friend has moved on but will always be with us.</p>
+    <button type="button" class="danger" id="goodbye">Say goodbye to ${esc(disp(r))}</button>
+    <p class="hint bad" id="byemsg"></p></div>`;
+  return h;
+}
+function wireSoul(r){
+  const enc=encodeURIComponent(r.name);
+  $("#renameform").onsubmit=async ev=>{ev.preventDefault();
+    try{await post(`/api/robots/${enc}/rename`,{display_name:$("#rename").value});
+      $("#renamemsg").textContent="Renamed. The housemates are told."; refreshRobots()}
+    catch(e){$("#renamemsg").textContent=e.message}};
+  $("#savepersona").onclick=async()=>{
+    try{await api(`/api/robots/${enc}/persona`,{method:"PUT",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({persona:$("#persona").value})});
+      $("#personamsg").textContent="Saved. The next conversation starts with this persona."}
+    catch(e){$("#personamsg").textContent=e.message}};
+  const draw=$("#drawbtn"); if(draw)draw.onclick=async()=>{draw.disabled=true;draw.textContent="Drawing…";
+    try{await post(`/api/robots/${enc}/portrait`)}catch(e){$("#drawmsg").textContent=e.message;draw.disabled=false}};
+  const pitch=$("#pitch"),speed=$("#speed");
+  if(pitch){pitch.oninput=()=>$("#pitchval").textContent=pitch.value;
+    speed.oninput=()=>$("#speedval").textContent=speed.value;
+    $("#listen").onclick=async()=>{try{const res=await fetch(`/api/robots/${enc}/voice/preview`,
+      {method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({id:$("#voiceid").value,pitch:+pitch.value,speed:+speed.value})});
+      if(!res.ok)throw new Error((await res.json()).detail||"preview failed");
+      const url=URL.createObjectURL(await res.blob()); new Audio(url).play()}catch(e){$("#voicemsg").textContent=e.message}};
+    $("#keepvoice").onclick=async()=>{try{await api(`/api/robots/${enc}/voice`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({id:$("#voiceid").value,pitch:+pitch.value,speed:+speed.value})});
+      $("#voicemsg").textContent="Kept."}catch(e){$("#voicemsg").textContent=e.message}}}
+  $$("[data-letgo]").forEach(b=>b.onclick=async()=>{
+    try{await api(`/api/robots/${enc}/promises/${b.dataset.letgo}`,{method:"DELETE"}); refreshRobots()}catch(e){alert(e.message)}});
+  $("#fresh").onclick=async()=>{await post(`/api/robots/${enc}/reset`,{forget:false}); refreshRobots()};
+  $("#forgetall").onclick=async()=>{if(!confirm(`Wipe all of ${disp(r)}'s memories? Its persona stays.`))return;
+    await post(`/api/robots/${enc}/reset`,{forget:true}); refreshRobots()};
+  $("#goodbye").onclick=async()=>{if(!confirm(`Say goodbye to ${disp(r)}?`))return;
+    $("#byemsg").textContent="Saying goodbye…";
+    try{const res=await api(`/api/robots/${enc}`,{method:"DELETE"});
+      if(res.remembered)select("~"+res.remembered.id); refreshAll()}
+    catch(e){$("#byemsg").textContent=e.message}};
+}
+function money(v){if(v===null||v===undefined)return"–"; return v<0.01?"<$0.01":"$"+v.toFixed(2)}
+function fmtTok(n){n=n||0; if(n>=1e6)return (n/1e6).toFixed(1)+"M"; if(n>=1e3)return (n/1e3).toFixed(1)+"k"; return ""+n}
+function statsHTML(r){
+  const turns=r.turns||[], u=r.usage||{};
+  const avg=turns.length?(turns.reduce((a,t)=>a+(t.ms||0),0)/turns.length/1000):0;
+  const max=Math.max(1,...turns.map(t=>(t.ms||0)/1000));
+  const grid=max<=4?2:max<=12?5:10;
+  let h=`<div class="tiles">
+    <div class="tile"><div class="num">${money(u.usd)}</div><div class="hint">spent so far (estimate)</div></div>
+    <div class="tile"><div class="num">${turns.length?avg.toFixed(1)+" s":"–"}</div><div class="hint">average reply time, last ${turns.length} turns</div></div>
+    <div class="tile"><div class="num">${u.calls||0}</div><div class="hint">calls to the brain</div></div>
+    <div class="tile"><div class="num">${fmtTok(u.cache_read)}</div><div class="hint">tokens read from cache</div></div></div>`;
+  h+=`<div class="card"><h2>Reply time per turn</h2><div class="chart">`;
+  for(const t of turns){const s=(t.ms||0)/1000;
+    h+=`<div class="bar" tabindex="0" style="height:${Math.max(4,s/max*100)}%" data-tip="${s.toFixed(1)} s · ${esc(clock(t.t))} / from ${esc(t.from||"")} / used ${esc((t.tools||[]).join(", ")||"nothing")}"></div>`}
+  h+=`</div><p class="hint">${turns.length?`${esc(clock(turns[0].t))} … latest · gridlines every ${grid} s`:"No turns yet."}</p>
+    <details><summary>Show as a table</summary><table><tr><th>When</th><th>From</th><th>Tools used</th><th>Brain calls</th><th>Seconds</th></tr>
+    ${turns.map(t=>`<tr><td>${esc(clock(t.t))}</td><td>${esc(t.from||"")}</td><td>${esc((t.tools||[]).join(", "))}</td><td>${t.steps??""}</td><td>${((t.ms||0)/1000).toFixed(1)}</td></tr>`).join("")}
+    </table></details></div>`;
+  h+=`<div class="card"><h2>Tokens</h2><table>
+    <tr><td>input (new)</td><td>${fmtTok(u.in)}</td></tr>
+    <tr><td>input read from cache</td><td>${fmtTok(u.cache_read)}</td></tr>
+    <tr><td>input written to cache</td><td>${fmtTok(u.cache_write)}</td></tr>
+    <tr><td>output (incl. thinking)</td><td>${fmtTok(u.out)}</td></tr></table>
+    <p class="hint">${S.info&&S.info.price?`Priced at ${esc(S.info.model)} rates: $${S.info.price.in} in / $${S.info.price.out} out / $${S.info.price.cached} cached per million tokens. Reply times exclude speaking.`:"No price known for this model, so cost isn't counted."}</p></div>`;
+  return h;
+}
+function wireStats(r){
+  const tip=$("#tip");
+  $$(".bar").forEach(b=>{const show=()=>{tip.textContent=b.dataset.tip;tip.style.display="block";
+      const rect=b.getBoundingClientRect(); tip.style.left=Math.min(innerWidth-270,rect.left)+"px";
+      tip.style.top=(rect.top-44)+"px"};
+    b.onmouseenter=show; b.onfocus=show;
+    b.onmouseleave=()=>tip.style.display="none"; b.onblur=()=>tip.style.display="none"});
+}
+function viewAdd(){
+  document.documentElement.style.setProperty("--me","#c75b39");
+  const open=S.builds.find(b=>b.id===S.buildId)||S.builds.find(b=>!b.finished);
+  if(open){viewBuild(open);return}
+  const won=S.workshops.filter(w=>w.online);
+  $("#main").innerHTML=`<div class="wrap"><div class="hero">
+    <span class="disc" style="width:72px;height:72px;font-size:30px"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg></span>
+    <div><h1>Add a robot</h1><p class="hint">The builder walks you through it: pick a device, connect it, describe it, check it, give it a soul.</p></div></div>
+    ${won.length?`<p>Workshops online: ${won.map(w=>`<strong>${esc(w.display_name||w.id)}</strong>`).join(", ")}. Plug a device into one of them, or put it on the network.</p>`
+      :`<p class="pill bad">No workshop is online. Start the workshop on the machine your device is attached to.</p>`}
+    <div class="composer"><button id="startbuild">Start building</button></div>
+    <p class="hint">An Arduino starter kit, an IP camera, a robot you already own: each becomes a robot with a soul in a few minutes.</p>
+    <h2>Builds</h2>${S.builds.length?S.builds.map(b=>`<div class="card">
+      <strong>${esc(b.name||"Unnamed robot")}</strong> <span class="hint">· ${b.finished?"finished":"at "+esc(b.stage||"device")} · started ${ago(b.created)}</span>
+      <div class="composer"><button class="quiet" data-resume="${esc(b.id)}">${b.finished?"Look back":"Resume"}</button>
+      <button class="danger" data-delbuild="${esc(b.id)}">Delete</button></div></div>`).join(""):`<p class="hint">No builds yet.</p>`}
+    </div>`;
+  $("#startbuild").onclick=async()=>{const s=await post("/api/builds",{}); S.buildId=s.id; refreshAll()};
+  $$("[data-resume]").forEach(b=>b.onclick=()=>{S.buildId=b.dataset.resume; viewBuild(S.builds.find(x=>x.id===S.buildId))});
+  $$("[data-delbuild]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Delete this build? A robot that already has its soul stays in the house."))return;
+    await api(`/api/builds/${encodeURIComponent(b.dataset.delbuild)}`,{method:"DELETE"}); refreshAll()});
+}
+function viewBuild(sheet){
+  if(!sheet){viewAdd();return}
+  const steps=["Device","Connect","Body","Check","Soul"];
+  const cur=Math.min(5,Math.max(1,sheet.step||1));
+  $("#main").innerHTML=`<div class="wrap"><div class="hero">
+    <span class="disc" style="width:72px;height:72px;font-size:30px">+</span><div>
+    <h1>${esc(sheet.name||"A new robot")}</h1>
+    <p class="hint">${sheet.finished?"Lives in the house now.":`Step ${cur} of 5 · ${sheet.workshop?"on "+esc(sheet.workshop)+" · ":""}$${(sheet.spent||0).toFixed(2)} so far`}</p></div></div>
+    <div class="grid2"><div id="sheet">
+    ${steps.map((s,i)=>`<div class="card"><div class="hero" style="margin:0">
+      <span class="stepnum ${i+1<cur?"done":i+1===cur?"cur":""}">${i+1<cur?"✓":i+1}</span>
+      <div><h2>${s}</h2><p class="hint">${stepHint(sheet,i+1)}</p></div></div>
+      ${i===0?`<div class="composer"><button class="quiet" id="lookagain" ${sheet.busy?"disabled":""}>Look again</button></div><p class="hint" id="scanmsg"></p>
+        <div id="devices">${(sheet.devices||[]).map(d=>`<div class="card"><strong>${esc(d.name||"unknown: no family yet")}</strong>
+        <span class="hint">${esc(d.family_title||d.family||"")} · ${esc(d.workshop||"")} · ${esc(d.where||"")}</span>
+        ${d.belongs?`<span class="hint">belongs to ${esc(d.belongs)}</span>`:`<div class="composer"><button data-use="${esc(d.id||"")}">Use this</button></div>`}</div>`).join("")||`<p class="hint">Nothing found. Plug a board into a workshop's USB, or check the device is on the network.</p>`}</div>`:""}
+      ${i===4&&!sheet.finished?`<div class="composer"><button id="givesoul" ${sheet.busy?"disabled":""}>Give it a soul</button></div>`:""}
+      ${i===4&&sheet.finished?`<p>${esc(sheet.name||"It")} joined the house.</p><div class="composer"><button id="meet">Meet ${esc(sheet.name||"it")}</button></div>`:""}
+      </div>`).join("")}
+    </div><div><h2>The builder</h2><div class="feed" id="buildfeed">
+      ${(sheet.events||[]).map(e=>`<div class="bubble ${e.from==="human"?"you":""}"><div class="body">${esc(e.text||"")}</div></div>`).join("")}
+      ${sheet.busy?`<p class="hint">The builder is working…</p>`:""}</div>
+      <form class="composer" id="buildform"><input type="text" id="buildtext" placeholder="Tell the builder…">
+      <button>Send</button></form><p class="hint bad" id="builderr"></p>
+      <p class="hint">${esc(sheet.note||"")}</p></div></div></div>`;
+  const meet=$("#meet"); if(meet)meet.onclick=()=>{if(sheet.robot)select(sheet.robot)};
+  const look=$("#lookagain"); if(look)look.onclick=async()=>{
+    $("#scanmsg").textContent=`Looking for devices on ${S.workshops.length} workshops…`;
+    try{for(const w of S.workshops){await api(`/api/builds/${encodeURIComponent(sheet.id)}/devices?workshop=${encodeURIComponent(w.id)}&fresh=true`)}
+      $("#scanmsg").textContent=`Looked on ${S.workshops.length} workshops · ${new Date().toLocaleTimeString()}`}
+    catch(e){$("#scanmsg").textContent="couldn't scan: "+e.message}};
+  $$("[data-use]").forEach(b=>b.onclick=async()=>{try{const s=await post(`/api/builds/${encodeURIComponent(sheet.id)}/device`,
+    {workshop:sheet.workshop,device:b.dataset.use,name:sheet.name}); Object.assign(sheet,s); viewBuild(sheet)}catch(e){$("#builderr").textContent=e.message}});
+  const gs=$("#givesoul"); if(gs)gs.onclick=async()=>{try{const s=await post(`/api/builds/${encodeURIComponent(sheet.id)}/soul`,{});
+    Object.assign(sheet,s); viewBuild(sheet)}catch(e){$("#builderr").textContent=e.message}};
+  $("#buildform").onsubmit=async ev=>{ev.preventDefault();const text=$("#buildtext").value; $("#buildtext").value="";
+    try{const s=await post(`/api/builds/${encodeURIComponent(sheet.id)}/say`,{text}); Object.assign(sheet,s); viewBuild(sheet)}
+    catch(e){$("#builderr").textContent=e.message}};
+}
+function stepHint(sheet,i){
+  return {1:sheet.device?`${sheet.device}`:"The scan runs by itself the first time.",
+    2:sheet.connected?"Ready.":"The family's connect hint and its fields appear here.",
+    3:sheet.description?`${sheet.name||"It"}: ${sheet.description}`:"Tell the builder what you'd like it to be. It writes the plan.",
+    4:"One card per check appears here.",
+    5:"When every check has passed, the robot starts up, joins the house and is born."}[i]||"";
+}
+function viewSystem(){
+  document.documentElement.style.setProperty("--me","#c75b39");
+  const sys=S.system||{services:{},workshops:[],equipment:[]};
+  const svc=(id,title,desc,extra)=>{const s=(sys.services||{})[id]||{};
+    return `<div class="card"><h2>${title} <span class="pill ${s.ready?"good":"bad"}">${s.ready?"running":"needs attention"}</span></h2>
+    <p class="hint">${desc}</p><p class="mono">${esc(extra||s.detail||s.model||"")}</p></div>`};
+  let h=`<div class="wrap"><div class="hero">${houseFace(72)}<div><h1>System</h1>
+    <p class="hint">The house's own machinery: its services, the workshops on each machine, and the equipment. Nothing here has a soul.</p></div></div><h2>Ponki</h2>`;
+  h+=svc("hub","The hub","The house itself: souls, the record, the builder, the web UI. On this NUC.",
+    sys.hub?`${sys.hub.provider} · ${sys.hub.model} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString()} · ${sys.hub.robots} robots`:"");
+  // hub is served implicitly: mark running when system loaded
+  h=h.replace('needs attention','running');
+  h+=svc("voice","Voice","Speaks for robots without a speaker of their own (Kokoro, Piper).");
+  h+=svc("ears","Ears","Turns what the house mic hears into text.");
+  h+=svc("finding","Finding","“Where exactly is X?” for robots with a camera.");
+  h+=`<div class="card"><h2>House settings</h2>
+    <p>Robots chat <span class="hint">A robot may react to what another one says out loud.</span>
+    <button class="switch" data-setting="chatter">${S.settings.chatter?"on":"off"}</button></p>
+    <p>Always listening <span class="hint">Experimental: the house mic hears everything said in the room.</span>
+    <button class="switch" data-setting="always_on" ${S.mic&&S.mic.house_mic?"":"disabled"}>${S.settings.always_on?"on":"off"}</button></p>
+    <p>House mic <span class="hint">The mic behind the hold-to-talk button.</span>
+    <select id="micselect"><option value="">none online</option>${(S.mic.mics||[]).map(m=>
+      `<option ${S.settings.mic===m?"selected":""}>${esc(m)}</option>`).join("")}</select></p></div>`;
+  h+=`<h2>Workshops</h2><p class="hint">The house's hands on each machine: they find devices, connect and check them, and run them.</p>`;
+  for(const w of sys.workshops||S.workshops){h+=`<div class="card"><h2>${esc(w.display_name||w.id)}
+    <span class="pill ${w.online?"good":"bad"}">${w.online?"online":"offline"}</span></h2>
+    <form class="composer" data-wrename="${esc(w.id)}"><input type="text" value="${esc(w.display_name||w.id)}"><button class="quiet">Rename</button></form>
+    <p class="mono">id ${esc(w.id)} · families: ${esc((w.families||[]).join(", ")||"—")}</p>
+    ${(w.runs||[]).length?w.runs.map(r=>`<p><a href="#" data-gorobot="${esc(r.id)}">${esc(r.display_name||r.id)}</a>
+      <span class="hint">${esc(r.kind||"robot")} · ${esc(r.family||"")} · ${r.online?"running":"not running"}</span></p>`).join("")
+      :`<p class="hint">Runs nothing yet.</p>`}</div>`}
+  h+=`<h2>Equipment</h2><p class="hint">Mics and speakers: house equipment, no soul. Equipment added through Add a robot can be removed here.</p>`;
+  for(const eq of sys.equipment||[]){h+=`<div class="card"><h2>${esc(eq.display_name||eq.id)}
+    ${S.settings.mic===eq.id?`<span class="pill">house mic</span>`:""} <span class="pill ${eq.online?"good":"bad"}">${eq.online?"online":"offline"}</span></h2>
+    <form class="composer" data-erename="${esc(eq.key||eq.id)}"><input type="text" value="${esc(eq.display_name||eq.id)}"><button class="quiet">Rename</button></form>
+    <p class="mono">id ${esc(eq.id)} · ${esc(eq.kind||"")} · ${eq.record&&eq.record.runner==="workshop"?"added through Add a robot":"its own service"}</p>
+    ${eq.record&&eq.record.runner==="workshop"?`<button class="danger" data-removeeq="${esc(eq.key||eq.id)}">Remove</button>`:""}
+    <span class="hint bad" data-eqmsg></span></div>`}
+  h+=`<div class="card"><h2>Logs</h2><p class="hint">What happened, as the house and each machine wrote it down: newest at the bottom.</p>
+    <div class="composer"><select id="logsrc">
+      <optgroup label="The house"><option value="events">House events (everything)</option>
+      <option value="api">API calls (Muse, SAM): what left the house</option></optgroup>
+      ${(sys.workshops||[]).filter(w=>w.online).map(w=>`<option value="workshop:${esc(w.id)}">the workshop itself · ${esc(w.id)}</option>`).join("")}
+    </select><label class="hint"><input type="checkbox" id="logquiet" checked> Hide routine requests</label>
+    <button class="quiet" id="logrefresh">Refresh</button></div>
+    <div class="logbox" id="logbox">(nothing logged yet)</div></div>`;
+  $("#main").innerHTML=h; wireSystem();
+}
+function wireSystem(){
+  $$("[data-setting]").forEach(b=>b.onclick=async()=>{const k=b.dataset.setting;
+    try{const r=await api("/api/house",{method:"PUT",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({[k]:!S.settings[k]})}); S.settings=r.settings; render()}catch(e){alert(e.message)}});
+  const ms=$("#micselect"); if(ms)ms.onchange=async()=>{try{const r=await api("/api/house",
+    {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({mic:ms.value||null})});
+    S.settings=r.settings; refreshAll()}catch(e){alert(e.message)}};
+  $$("[data-wrename]").forEach(f=>f.onsubmit=async ev=>{ev.preventDefault();
+    try{await post(`/api/equipment/${encodeURIComponent(f.dataset.wrename)}/rename`,
+      {display_name:f.querySelector("input").value}); refreshAll()}catch(e){alert(e.message)}});
+  $$("[data-erename]").forEach(f=>f.onsubmit=async ev=>{ev.preventDefault();
+    try{await post(`/api/equipment/${encodeURIComponent(f.dataset.erename)}/rename`,
+      {display_name:f.querySelector("input").value}); refreshAll()}catch(e){alert(e.message)}});
+  $$("[data-removeeq]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Remove this equipment? Its workshop stops it and deletes its settings. You can add it again through Add a robot."))return;
+    try{await api(`/api/equipment/${encodeURIComponent(b.dataset.removeeq)}`,{method:"DELETE"}); refreshAll()}
+    catch(e){alert(e.message)}});
+  $$("[data-gorobot]").forEach(a=>a.onclick=ev=>{ev.preventDefault(); select(a.dataset.gorobot)});
+  const load=async()=>{const src=$("#logsrc").value; const quiet=$("#logquiet").checked;
+    let url="/api/logs?lines=300&quiet="+quiet;
+    if(src==="api")url="/api/logs?source=api&lines=300";
+    else if(src.startsWith("workshop:"))url=`/api/logs?source=workshop&workshop=${encodeURIComponent(src.slice(9))}&lines=300&quiet=${quiet}`;
+    try{const r=await api(url); const box=$("#logbox");
+      box.textContent=(r.lines||[]).join("\n")||"(nothing logged yet)"; box.scrollTop=box.scrollHeight}
+    catch(e){$("#logbox").textContent=e.message}};
+  $("#logrefresh").onclick=load; $("#logsrc").onchange=load; load();
+}
+async function viewDeparted(entryId){
+  document.documentElement.style.setProperty("--me","#c75b39");
+  let d=null; try{d=await api(`/api/departed/${encodeURIComponent(entryId)}`)}catch(e){}
+  if(!d){$("#main").innerHTML=`<div class="wrap"><p class="hint">Nobody by that id moved on.</p></div>`;return}
+  const fake={name:d.name,display_name:d.display_name,color:d.color,
+    portrait:d.portrait?("/api/departed/"+encodeURIComponent(d.id)+"/portrait.webp"):null,online:true,_gone:true};
+  $("#main").innerHTML=`<div class="wrap"><div class="hero">${faceHTML(fake,112)}<div>
+    <h1>${esc(d.display_name||d.name)}</h1>
+    ${d.tagline?`<span class="tagbubble">“${esc(d.tagline)}”</span>`:""}
+    <p class="hint">Lived here ${d.born?dayLong(d.born):""} – ${dayLong(d.departed)} · moved on, always with us</p></div></div>
+    <div class="card"><h2>Who ${esc(d.display_name||d.name)} was</h2><p style="white-space:pre-wrap">${esc(d.persona||"")}</p>
+    <p class="hint">Body: ${esc(d.description||"")}</p></div>
+    <div class="card"><h2>What ${esc(d.display_name||d.name)} remembered</h2>
+    ${(d.journal||[]).length?[...d.journal].reverse().map(m=>`<div class="card"><p class="who">${m.t?dayLong(m.t):""}</p>
+      <p>${esc(typeof m==="string"?m:(m.text||m.input||JSON.stringify(m)))}</p></div>`).join("")
+      :`<p class="hint">No memories were written down.</p>`}
+    <p class="hint">${d.conversation_len||0} messages in the last conversation are kept too.</p></div>
+    <div class="card"><h2>Bring ${esc(d.display_name||d.name)} back</h2>
+    <p>Everything comes back: persona, memories, portrait, photos, and its workshop starts the body again (or its body has to be switched on again by hand). Housemates who heard they left are told; the others never knew.</p>
+    <div class="composer"><button id="bringback">Bring ${esc(d.display_name||d.name)} back home</button>
+    <button class="danger" id="forgetgone">Forget for good</button></div>
+    <p class="hint bad" id="backmsg"></p></div></div>`;
+  $("#bringback").onclick=async()=>{$("#backmsg").textContent="Bringing them home…";
+    try{const r=await post(`/api/departed/${encodeURIComponent(entryId)}/return`,{});
+      await refreshAll(); select(r.name); S.tab="talk"}catch(e){$("#backmsg").textContent=e.message}};
+  $("#forgetgone").onclick=async()=>{
+    if(!confirm(`Forget ${d.display_name||d.name} for good? The persona, memories, portrait and photos are deleted. This can't be undone.`))return;
+    try{await api(`/api/departed/${encodeURIComponent(entryId)}`,{method:"DELETE"});
+      S.sel="house"; refreshAll()}catch(e){$("#backmsg").textContent=e.message}};
+}
+function render(){
+  renderSidebar();
+  if(S.sel==="house")viewHouse();
+  else if(S.sel==="add")viewAdd();
+  else if(S.sel==="system")viewSystem();
+  else if(S.sel.startsWith("~"))viewDeparted(S.sel.slice(1));
+  else viewRobot();
+}
+async function refreshRobots(){try{S.robots=await api("/api/robots")}catch(e){}
+  try{S.grounding=await api("/api/grounding")}catch(e){}
+  try{S.departed=await api("/api/departed")}catch(e){} renderSidebar();
+  const r=robotOfSel();
+  if(r&&S.sel===r.name&&(S.tab==="house"||S.tab)) {
+    if(S.tab==="talk"||S.tab==="body"||S.tab==="soul"||S.tab==="stats"){
+      const active=document.activeElement;
+      const guard=active&&(active.id==="persona"||active.closest&&active.closest("#voiceform"));
+      if(!guard)render();
+    } else render();
+  }
+}
+async function refreshAll(){
+  const jobs=[["/api/info","info"],["/api/robots","robots"],["/api/grounding","grounding"],
+    ["/api/builds","builds"],["/api/workshops","workshops"],["/api/departed","departed"],
+    ["/api/mic","mic"],["/api/system","system"],["/api/voices","voices"],["/api/families","families"]];
+  for(const [path,key] of jobs){try{const v=await api(path);
+    if(key==="info")S.info=v; else if(key==="robots")S.robots=v; else if(key==="grounding")S.grounding=v;
+    else if(key==="builds")S.builds=v; else if(key==="workshops")S.workshops=v;
+    else if(key==="departed")S.departed=v; else if(key==="mic")S.mic=v;
+    else if(key==="system")S.system=v; else if(key==="voices")S.voices=v;
+    else if(key==="families")S.families=v}catch(e){}}
+  try{const h=await api("/api/house"); S.settings=h.settings||{}}catch(e){}
+  render();
+}
+let refreshTimer=null;
+function debouncedRefresh(){clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(()=>{refreshRobots()},150)}
+function popFace(id){$$(`[data-face="${CSS.escape(id)}"]`).forEach(f=>{
+  f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop")})}
+function playVoice(e){ if(!S.hear||!e.url)return; S.audioQ.push(e);
+  if(S.playing)return; S.playing=true;
+  const next=()=>{const item=S.audioQ.shift(); if(!item){S.playing=false;return}
+    $$(`[data-face="${CSS.escape(item.robot||"")}"]`).forEach(f=>f.classList.add("speaking"));
+    const a=new Audio(item.url);
+    a.onended=a.onerror=()=>{$$(`[data-face="${CSS.escape(item.robot||"")}"]`)
+      .forEach(f=>f.classList.remove("speaking")); next()};
+    a.play().catch(()=>next())}; next()}
+function onEvent(e){
+  if(e.kind==="voice"){playVoice(e);return}
+  if(e.kind==="voice_changed"){refreshRobots();return}
+  if(e.kind==="settings"){S.settings=e.settings||S.settings; renderSidebar();return}
+  if(e.kind==="floor"){S.floor.push(e); if(S.showFloor)appendFeed(e); return}
+  if(e.kind==="build"||e.kind.startsWith("fixture_")){refreshAll();return}
+  if(e.kind.startsWith("equipment_")){refreshAll();return}
+  if(e.kind==="photo_deleted"&&e.prefix){
+    $$("img,video").forEach(el=>{if((el.getAttribute("src")||"").startsWith(e.prefix)){
+      const chip=document.createElement("span"); chip.className="chip"; chip.textContent="photo deleted";
+      el.replaceWith(chip)}});
+    $$("a").forEach(a=>{if((a.getAttribute("href")||"").startsWith(e.prefix))a.remove()});
+  }
+  S.events.push(e); if(S.events.length>1500)S.events.splice(0,500);
+  if(e.kind==="say"||e.kind==="ask")popFace(e.robot);
+  appendFeed(e);
+  if(["renamed","moved_on","came_back","removed","online","offline","state","born","painted","soul_edited","reset","saw","located","watched","drew","painting"].includes(e.kind))debouncedRefresh();
+}
+function appendFeed(e){
+  if(NONFEED.includes(e.kind))return;
+  const feed=$("#feed"); if(!feed)return;
+  const ctx=S.sel==="house"?"house":"talk";
+  if(S.sel!=="house"&&!relevant(e,S.sel))return;
+  const html=feedHTML(e,ctx); if(!html)return;
+  const tmp=document.createElement("div"); tmp.innerHTML=html;
+  const empty=feed.querySelector(".hint"); if(empty&&feed.children.length<=1)feed.innerHTML="";
+  while(tmp.firstChild)feed.appendChild(tmp.firstChild);
+  wireZoom(feed); feed.scrollTop=feed.scrollHeight;
+}
+function connectUi(){
+  const proto=location.protocol==="https:"?"wss://":"ws://";
+  const ws=new WebSocket(proto+location.host+"/ws/ui");
+  ws.onopen=async()=>{try{const info=await api("/api/info");
+    if(S.loadedUi&&info.ui&&info.ui!==S.loadedUi){
+      const active=document.activeElement;
+      if(active&&(active.tagName==="INPUT"||active.tagName==="TEXTAREA")&&active.value){
+        setTimeout(()=>location.reload(),5000)} else location.reload()}
+    S.loadedUi=info.ui||S.loadedUi}catch(e){}};
+  ws.onmessage=ev=>{try{onEvent(JSON.parse(ev.data))}catch(e){}};
+  ws.onclose=()=>setTimeout(connectUi,1500);
+  ws.onerror=()=>{try{ws.close()}catch(e){}};
+}
+(async function start(){
+  try{S.info=await api("/api/info"); S.loadedUi=S.info.ui||0}catch(e){}
+  try{S.events=(await api("/api/events")).filter(e=>!NONFEED.includes(e.kind))}catch(e){S.events=[]}
+  S.floor=S.events.filter(e=>e.kind==="floor"); S.events=S.events.filter(e=>e.kind!=="floor");
+  await refreshAll(); connectUi();
+})();
+</script>
+</body>
+</html>

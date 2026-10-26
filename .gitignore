@@ -1,0 +1,17 @@
+# Secrets and runtime state — never in git (spec 00)
+.env
+data/
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*~
