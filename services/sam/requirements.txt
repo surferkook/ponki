@@ -1,0 +1,9 @@
+# The finding service's own venv (Python 3.10 on the NUC). Versions checked
+# on PyPI; av/numpy pins are the latest lines that still support 3.10.
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1
+numpy==2.2.6
+Pillow==12.3.0
+av==14.2.0
+meta-sam-parser==0.1.0

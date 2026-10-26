@@ -83,16 +83,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 /* -- main -- */
 #main{overflow-y:auto;padding:28px 32px 48px;min-width:0}
 .wrap{margin:0}
-.houseview{margin:-28px -32px -48px;padding:28px 32px 0}
-.houseview .feed{width:100%;padding-top:8px;border-top:1px solid var(--line);
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent 10px,#000 42px);
-  mask-image:linear-gradient(to bottom,transparent 0,transparent 10px,#000 42px)}
+/* talk views: the page is the window's height, the feed scrolls inside itself and the talk bar sits under it */
+#main:has(>.houseview,>.talkview){overflow:hidden;padding:0;display:flex;flex-direction:column}
+.houseview,.talkview{display:flex;flex-direction:column;flex:1;min-height:0;margin:0;padding:28px 0 0}
+.houseview>.hero,.talkview>.hero,.talkview>.tabs{margin-left:32px;margin-right:32px}
+.talkview>.tabs{margin-bottom:0}
+.talkview #panel{display:flex;flex-direction:column;flex:1;min-height:0}
+.houseview .feed,.talkview .feed{flex:1;min-height:0;overflow-y:auto;padding:18px 32px}
+.houseview .feed{border-top:1px solid var(--line)}
 .houseview .feed>*{max-width:940px;width:100%}
 .houseview .bubble.you{align-self:stretch}
-.houseview .composer,.talkview .composer{position:sticky;bottom:-48px;z-index:50;
-  border-top:1px solid var(--line);background:var(--surface);opacity:1;
-  padding:6px 32px;margin:0 -32px;align-items:center;flex-wrap:nowrap}
-.micbtn.quiet{border:2px solid var(--ink-2)}
+.talkview #talkerr{margin:0;padding:0 32px 12px}
+.talkview #talkerr:empty{display:none}
+.houseview .composer,.talkview .composer{display:flex;gap:8px;margin:0;padding:12px 32px 18px;
+  border-top:1px solid var(--line);flex-wrap:nowrap}
+.houseview .composer{align-items:center}
+.composer input[type="text"]{flex:1;min-width:0;border-radius:12px;padding:9px 12px}
+.composer button{border:0;border-radius:12px;padding:9px 16px;font-weight:600;background:var(--ink);color:var(--bg)}
+.composer button.quiet{background:none;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.composer button:disabled{opacity:.5;cursor:progress}
+.composer .hint{margin:6px 0 0}
 .frow{display:flex;justify-content:space-between;gap:12px}
 .frow .val{text-align:right}
 .hero{display:flex;gap:18px;align-items:center;margin:6px 0 20px}
@@ -119,9 +129,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
   border-radius:8px;padding:3px 9px}
 .composer{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .composer input[type="text"]{flex:1;min-width:180px}
-.micbtn{touch-action:none;user-select:none;-webkit-user-select:none}
-.micbtn.listening{background:var(--ink);color:var(--bg);box-shadow:0 0 0 6px color-mix(in srgb,var(--me) 30%,transparent)}
-.micbtn.thinking{opacity:.6}
+.micbtn{display:inline-flex;align-items:center;gap:6px;touch-action:none;user-select:none;-webkit-user-select:none}
+.composer .micbtn.listening{background:var(--ink);color:var(--surface);box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 25%,transparent)}
+.micbtn.listening svg{animation:talk .6s ease-in-out infinite alternate}
+.micbtn.thinking{opacity:.7}
+@keyframes talk{to{transform:scale(1.06)}}
 /* body tab, forms, stats */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .field{display:flex;flex-direction:column;gap:4px;margin:0 0 9px}
@@ -165,9 +177,12 @@ table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1
   #side .st,#foot,.liveline{display:none}
   .brand{font-size:21px;padding-top:8px}
   #main{overflow:visible;padding:18px 16px 40px}
-  .houseview{margin:-18px -16px -40px;padding:18px 16px 0}
-  .houseview .composer{margin:0 -16px;padding:6px 16px;bottom:-40px}
-  .talkview .composer{bottom:-40px}
+  #main:has(>.houseview,>.talkview){display:block;overflow:visible;padding:0}
+  .houseview,.talkview{padding-top:18px}
+  .houseview>.hero,.talkview>.hero,.talkview>.tabs{margin-left:16px;margin-right:16px}
+  .houseview .feed,.talkview .feed{overflow:visible;padding-left:16px;padding-right:16px}
+  .houseview .composer,.talkview .composer{position:sticky;bottom:0;background:var(--bg);padding:10px 16px 14px}
+  .talkview #talkerr{padding:0 16px 12px}
   .grid2{grid-template-columns:1fr}
   .hero h1{font-size:36px}
 }
@@ -273,7 +288,7 @@ function feedHTML(e,ctx){
     case "error": return line(e,`${esc(n)}: ${esc(e.text||"")}`,true);
     case "saw": return bubble(e,`${n} looked`,photoTag(e.image),r);
     case "locating": return line(e,`${esc(n)} is searching for “${esc(e.what||"")}”…`);
-    case "located": {const c=(e.found||[]).length;
+    case "located": {const c=Array.isArray(e.found)?e.found.length:Object.values(e.found||{}).reduce((a,v)=>a+(v||[]).length,0);
       return bubble(e,`${n} ${c?`found ${c} ${esc(e.what||"")}${c>1?"s":""}`:`no ${esc(e.what||"")}`} · ${e.ms?Math.round(e.ms/100)/10+" s":""}`,
         `${photoTag(e.image)}<div>${esc(e.text||"")}</div>`,r)}
     case "watching": return line(e,`${esc(n)} is watching “${esc(e.what||"")}” for ${esc(e.seconds||"")} s…`);
@@ -337,7 +352,7 @@ function openZoom(url){const d=$("#zoom");d.querySelector("img").src=url;
 }
 function micButtonHTML(id){const has=S.mic&&S.mic.house_mic;
   return `<button type="button" class="micbtn quiet" id="${id}" ${has?"":"disabled"}>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     <span>Hold to talk</span></button>`}
 function wireMic(btn,to,noteEl){
   if(!btn)return; let active=false;
@@ -367,7 +382,7 @@ function viewHouse(){
     <div class="composer">${micButtonHTML("micbtn")}
     <span class="hint" id="michint">${hasMic?`Hold to talk, and say a robot's name: “Keiki, where's the orange?”`:"No house mic is online."}</span></div></div>`;
   wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint"));
-  const m=$("#main"); if(m)m.scrollTop=m.scrollHeight;
+  for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
 function heroHTML(r){
   const st=r.online?`home${r.state&&r.state.pose?", in "+esc(r.state.pose):""} · connected ${ago(r.since)}`
@@ -405,7 +420,7 @@ function wireTalk(r){
     try{await post(`/api/robots/${encodeURIComponent(r.name)}/chat`,{text})}
     catch(e){$("#talkerr").textContent=e.message}
     btn.disabled=false; input.focus()};
-  const m=$("#main"); if(m)m.scrollTop=m.scrollHeight;
+  for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
 function schemaFields(actionName,schema){
   const props=(schema&&schema.properties)||{}, req=new Set((schema&&schema.required)||[]);
@@ -842,7 +857,7 @@ function appendFeed(e){
   const tmp=document.createElement("div"); tmp.innerHTML=html;
   const empty=feed.querySelector(".hint"); if(empty&&feed.children.length<=1)feed.innerHTML="";
   while(tmp.firstChild)feed.appendChild(tmp.firstChild);
-  wireZoom(feed); const m=$("#main"); if(m)m.scrollTop=m.scrollHeight;
+  wireZoom(feed); for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
 function connectUi(){
   const proto=location.protocol==="https:"?"wss://":"ws://";

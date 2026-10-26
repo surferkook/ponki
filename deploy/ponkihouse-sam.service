@@ -1,0 +1,15 @@
+[Unit]
+Description=Ponkihouse finding — SAM 3.1 locate/watch service
+After=network.target
+
+[Service]
+Type=simple
+User=@PONKI_USER@
+WorkingDirectory=@PONKI_DIR@/services/sam
+ExecStart=@PONKI_DIR@/services/sam/.venv/bin/uvicorn sam_server:app --host 127.0.0.1 --port 8201
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=@PONKI_DIR@/.env
+
+[Install]
+WantedBy=multi-user.target

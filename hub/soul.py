@@ -365,23 +365,40 @@ class Soul:
 
         if camera_action(manifest):
             house_tool("locate",
-                       "Find exactly where something is with your own camera: a fresh photo with "
-                       "numbered masks and each one's position in your view. For finding, "
-                       "counting and pointing; takes a few seconds (use your photo action for a "
-                       "glance). A photo shows the moment it was taken — after anything moved "
-                       "(a rover you are guiding), look again before the next direction, and "
-                       "mind which way a robot faces.",
-                       {"what": {"type": "string", "description": "a short English noun phrase"}},
+                       "Find exactly where something is, using your own camera: takes a photo "
+                       "and marks every match (numbered masks) with its position in your view. "
+                       "Use it to find, count or point at things, and ALWAYS before you guide "
+                       "someone to something or tell them which way to go: a guess from a glance "
+                       "isn't good enough to steer by, and the marked photo shows everyone in "
+                       "the app what you found. Takes a few seconds; use look for a general "
+                       "glance. Returns the annotated photo. A photo shows the moment it was "
+                       "taken: after anything moved (a rover you're guiding), look again before "
+                       "you give the next direction, and mind which way a robot faces (its "
+                       "front, not its back). You can name several things at once, comma-"
+                       "separated, and get their positions in the same fresh photo.",
+                       {"what": {"type": "string",
+                                  "description": "A short English noun phrase for what it looks "
+                                                 "like, e.g. 'plant', 'red bag', 'yellow flag', "
+                                                 "'small white robot' — or several, comma-"
+                                                 "separated (at most 4). Never a name ('Buddy's "
+                                                 "flag'): the finder knows what things look like, "
+                                                 "not who they are."}},
                        ["what"])
         if "record" in actions:
             house_tool("watch",
-                       "Record a short clip and track what you name: a strip of key moments with "
-                       "when and how much it moved. For actions, not still views. To watch a "
-                       "housemate do something, call watch and ask_robot in the same step (the "
-                       "camera starts once the ask has been said). Takes the clip plus about 30 s.",
-                       {"what": {"type": "string"},
+                       "Watch something happen: records a short clip with your own camera, "
+                       "tracks what you name through it, and returns a strip of the key moments "
+                       "(what you named marked in colour) with when and how much it moved. Use "
+                       "it for actions (a robot kicking, dancing, driving; someone walking by), "
+                       "not for a still view (that's look). To watch a housemate do something, "
+                       "call watch and ask_robot in the SAME step: the camera starts the moment "
+                       "your ask has been said, so the clip catches it. Takes the clip's length "
+                       "plus ~30 s.",
+                       {"what": {"type": "string",
+                                   "description": "A short English noun phrase: 'robot', "
+                                                  "'person', 'ball'."},
                         "seconds": {"type": "integer", "minimum": 3, "maximum": 20,
-                                    "description": "3–20, default 12"}},
+                                    "description": "How long to record, 3-20 (default 12)."}},
                        ["what"])
         house_tool("say",
                    "Say something out loud right now, in the middle of your task, and carry on "

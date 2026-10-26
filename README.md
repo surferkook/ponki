@@ -25,6 +25,27 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 Open http://localhost:8200/ — the tester robot appears on the board and its
 actions run from the Body tab.
 
+## The camera and the finding service
+
+A Tapo-style ONVIF camera becomes a robot that looks, turns, and finds
+things. It needs a **Camera Account** (Tapo app → the camera → ⚙️ → Advanced
+Settings → Camera Account; on some firmware also Me → Tapo Lab → Third-Party
+Compatibility, and Privacy Mode off). The account lives only in the
+workshop's `data/secrets/`, never in the hub. The driver
+(`bodies/onvif/onvif_body.py <robot.json>`) runs on the Pi workshop; its
+Python deps are pinned in `bodies/onvif/requirements.txt`.
+
+Finding things (`locate` / `watch`) is done by SAM 3.1 on Meta's Model API,
+through a small local service on the NUC:
+
+```bash
+python3 -m venv services/sam/.venv
+services/sam/.venv/bin/pip install -r services/sam/requirements.txt
+(cd services/sam/js && npm install)   # the mask decoder worker
+./deploy/install.sh ponkihouse-sam
+sudo systemctl enable --now ponkihouse-sam   # 127.0.0.1:8201
+```
+
 ## Flashing an Arduino (the pins firmware)
 
 One generic sketch turns any Uno/Nano into a board the house configures at

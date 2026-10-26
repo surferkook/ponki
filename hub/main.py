@@ -197,12 +197,15 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
     @app.post("/api/robots/{rid}/locate")
     async def locate(rid: str, payload: dict):
         _robot(rid)
-        raise HTTPException(501, "the object finder arrives in step 4 (spec 05)")
+        result = await house.locate(rid, payload.get("what") or "")
+        return {"ok": result["ok"], "text": result["text"]}
 
     @app.post("/api/robots/{rid}/watch")
     async def watch(rid: str, payload: dict):
         _robot(rid)
-        raise HTTPException(501, "watching arrives with the camera in step 4 (spec 05)")
+        result = await house.watch(rid, payload.get("what") or "",
+                                   payload.get("seconds"))
+        return {"ok": result["ok"], "text": result["text"]}
 
     # -- photos ---------------------------------------------------------------------
     @app.get("/api/robots/{rid}/seen/{filename}")
@@ -578,8 +581,14 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/grounding")
     async def grounding():
-        return {"ready": False, "model": os.environ.get("HOUSE_SAM_MODEL", "sam-3.1"),
-                "detail": "the object finder arrives in step 4 (spec 05)"}
+        from . import grounding as grounding_mod
+
+        health = await grounding_mod.health()
+        return {"ready": health.get("state") == "ready",
+                "state": health.get("state"),
+                "model": health.get("model") or os.environ.get(
+                    "HOUSE_SAM_MODEL", "sam-3.1"),
+                "detail": health.get("error") or ""}
 
     def _build_path(bid: str) -> Path:
         return house.data_dir / "builds" / f"{bid}.json"

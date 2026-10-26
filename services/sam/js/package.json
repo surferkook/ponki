@@ -1,0 +1,8 @@
+{
+  "name": "ponkihouse-sam-decoder",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@meta-sam/parser": "0.1.0"
+  }
+}

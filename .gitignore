@@ -3,6 +3,9 @@
 data/
 *.tmp
 
+# Node (the SAM mask-decoder worker)
+node_modules/
+
 # Python
 __pycache__/
 *.py[cod]

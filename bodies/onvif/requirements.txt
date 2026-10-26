@@ -1,0 +1,6 @@
+# The camera driver on the Pi workshop (Python 3.11 there). On the Pi,
+# OpenCV 4.10.0 comes from the distro (python3-opencv); the pip equivalent
+# is opencv-python-headless 4.10.0.84.
+websockets==16.1.1
+opencv-python-headless==4.10.0.84
+av==14.2.0

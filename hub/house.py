@@ -492,34 +492,128 @@ class House:
     def _store_eye(self, rid: str, image_b64: str) -> str:
         return self.store_photo(rid, image_b64)
 
+    @staticmethod
+    def _photo_label(rid: str, url: str | None) -> str:
+        if url:
+            tail = url.rsplit("/", 1)[-1]
+            if tail.split(".")[0].isdigit():
+                return f"{rid} #{tail.split('.')[0]}"
+        return f"{rid} photo"
+
     async def locate(self, rid: str, what: str) -> dict:
-        """Spec 05 fills in SAM; until then the finder answers plainly."""
-        if not camera_action(self.manifest(rid)):
-            return {"ok": False, "text": "you have no camera to look with"}
-        if not (what or "").strip():
+        """Fresh photo → SAM → numbered overlay + words (spec 05)."""
+        from . import grounding
+
+        cam = grounding.camera_action(self.manifest(rid))
+        if not cam:
+            return {"ok": False, "text": "your body has no camera"}
+        concepts = [c.strip() for c in (what or "").split(",") if c.strip()][:4]
+        if not concepts:
             return {"ok": False, "text": "say what to look for"}
-        return {"ok": False, "text": "the object finder isn't running yet (it arrives in step 4)"}
+        self.emit("locating", rid, what=what)
+        shot = await self.act(rid, cam, {})
+        if not shot.get("ok") or not shot.get("image"):
+            return {"ok": False, "text": shot.get("text", "couldn't take a photo")}
+        label = self._photo_label(rid, shot.get("image_url"))
+        started = time.time()
+        try:
+            res = await grounding.segment(shot["image"], concepts)
+        except Exception as exc:
+            apilog.sam_call(rid, "locate", what, photo=label, error=str(exc))
+            self.emit("act_failed", rid, action="locate",
+                      text=f"couldn't search the photo: {exc}")
+            return {"ok": False, "text": f"couldn't search the photo: {exc}"}
+        found = res.get("found") or {}
+        total = sum(len(v) for v in found.values())
+        ms = res.get("ms", int((time.time() - started) * 1000))
+        apilog.sam_call(rid, "locate", what, photo=label,
+                        found=f"{total} found")
+        text = grounding.describe(found, ms, concepts)
+        url = self._store_eye(rid, res.get("overlay", ""))
+        self.emit("located", rid, what=what, image=url, found=found,
+                  ms=ms, text=text)
+        return {"ok": True, "text": text, "image": res.get("overlay"),
+                "usd": 0.0025 * len(concepts)}
 
     async def watch(self, rid: str, what: str, seconds=None) -> dict:
-        """Record via the body's `record` action; SAM tracking arrives in spec 05."""
+        """Record a clip, track what is named, strip + GIF/video (spec 05)."""
+        from . import grounding
+
         man = self.manifest(rid)
         if "record" not in (man.get("actions") or {}):
-            return {"ok": False, "text": "your body can't record a clip"}
+            return {"ok": False, "text": "your camera can't record clips"}
+        if not (what or "").strip():
+            return {"ok": False, "text": "say what to watch"}
+        concepts = [c.strip() for c in what.split(",") if c.strip()][:3] or [what]
         try:
             secs = int(seconds) if seconds is not None else WATCH_SECONDS
         except (TypeError, ValueError):
             secs = WATCH_SECONDS
         secs = max(3, min(20, secs))
-        # recording waits for the robot's own words too: the clip should start
-        # once the ask has been said, not while it is still speaking
-        deadline = time.time() + TURN_WAIT
+        # Start the camera only once the watcher has finished speaking: sleep
+        # briefly, then wait while its own line is being made or said (<=30 s).
+        await asyncio.sleep(0.3)
+        deadline = time.time() + 30
         while self._speaking.get(rid, 0) > 0 and time.time() < deadline:
             await asyncio.sleep(0.15)
-        result = await self.act(rid, "record", {"seconds": secs}, timeout=secs + 60)
-        if result.get("ok"):
-            result = dict(result)
+        self.emit("watching", rid, what=what, seconds=secs)
+        result = await self.act(rid, "record", {"seconds": secs},
+                                timeout=secs + 60)
+        if not result.get("ok"):
+            return result
+        data = result.get("data")
+        if not isinstance(data, dict) or not data.get("video"):
+            result = dict(result)  # a body that returns no clip: pass it through
             result.setdefault("what", what)
-        return result
+            return result
+        try:
+            res = await grounding.track(data["video"], concepts,
+                                        times=data.get("times"))
+        except Exception as exc:
+            apilog.sam_call(rid, "watch", what,
+                            photo=f"{rid} clip ({secs} s, not kept)",
+                            error=str(exc))
+            self.emit("act_failed", rid, action="watch",
+                      text=f"couldn't track it: {exc}")
+            return {"ok": False, "text": f"couldn't track it: {exc}"}
+        objects = res.get("objects") or []
+        moved = sum(1 for o in objects if o.get("moved"))
+        apilog.sam_call(rid, "watch", what,
+                        photo=f"{rid} clip ({secs} s, not kept)",
+                        found=f"{len(objects)} tracked, {moved} moved")
+        text = grounding.describe_track(what, res)
+        url = self._store_eye(rid, res.get("strip", ""))
+        self.emit("watched", rid, what=what, image=url, text=text,
+                  ms=res.get("ms", 0), moved=bool(moved))
+        if res.get("job"):
+            self.spawn(self._watch_media(rid, what, res["job"], url))
+        frames = int(res.get("frames") or data.get("frames") or 0)
+        return {"ok": True, "text": text, "image": res.get("strip"),
+                "usd": frames * len(concepts) * 0.0002}
+
+    async def _watch_media(self, rid: str, what: str, job: str,
+                           strip_url: str) -> None:
+        from . import grounding
+
+        try:
+            res = await grounding.media(job)
+        except Exception:
+            return  # the strip already told the story; media is a bonus
+        tail = strip_url.rsplit("/", 1)[-1]
+        if not tail.split(".")[0].isdigit():
+            return
+        n = tail.split(".")[0]
+        folder = self.data_dir / "seen" / rid
+        folder.mkdir(parents=True, exist_ok=True)
+        out: dict = {"what": what, "ms": res.get("ms", 0)}
+        if res.get("gif"):
+            (folder / f"{n}.gif").write_bytes(base64.b64decode(res["gif"]))
+            out["gif"] = f"/api/robots/{rid}/seen/{n}.gif"
+        if res.get("video"):
+            (folder / f"{n}.mp4").write_bytes(base64.b64decode(res["video"]))
+            out["video"] = f"/api/robots/{rid}/seen/{n}.mp4"
+        if len(out) > 2:
+            self.emit("watch_media", rid, **out)
 
     async def draw(self, rid: str, picture: str, for_: str = "") -> dict:
         from . import portrait as portrait_mod

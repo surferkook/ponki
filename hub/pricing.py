@@ -11,6 +11,8 @@ PRICES: dict[str, tuple[float, float, float]] = {
 }
 IMAGE_USD = 0.01        # Muse Image, per image
 SEARCH_USD = 0.0025     # web search, per search ($2.50 per 1,000)
+SAM_IMAGE_USD = 0.0025  # SAM 3.1, per image per concept ($2.50 per 1,000)
+SAM_FRAME_USD = 0.0002  # SAM 3.1, per video frame per concept ($0.20 per 1,000)
 
 
 def price_for(model: str) -> tuple[float, float, float] | None:
