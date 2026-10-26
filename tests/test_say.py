@@ -385,8 +385,8 @@ class ProviderShapes(unittest.TestCase):
         step = asyncio.run(run())
         self.assertEqual(step.usage["in"], 200)
         self.assertEqual(step.usage["cache_read"], 800)
-        self.assertEqual(captured["extra_body"], {"prompt_cache_key": "house-eye"})
-        self.assertNotIn("prompt_cache_key", captured)
+        self.assertEqual(captured["prompt_cache_key"], "house-eye")
+        self.assertNotIn("extra_body", captured)
 
     def test_contributor_and_bad_effort_refused(self) -> None:
         with self.assertRaises(ValueError):

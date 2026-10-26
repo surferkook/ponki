@@ -25,7 +25,7 @@ def jpeg_bytes() -> bytes:
 
 
 class PaintCall(unittest.TestCase):
-    def test_paint_sends_output_format_as_extra_body(self) -> None:
+    def test_paint_sends_output_format_natively(self) -> None:
         import base64
         from types import SimpleNamespace
 
@@ -42,8 +42,8 @@ class PaintCall(unittest.TestCase):
 
         client = SimpleNamespace(images=FakeImages())
         out = asyncio.run(portrait_mod.paint("buddy", "a small robot", client=client))
-        self.assertEqual(captured["extra_body"], {"output_format": "png"})
-        self.assertNotIn("output_format", captured)
+        self.assertEqual(captured["output_format"], "png")
+        self.assertNotIn("extra_body", captured)
         self.assertTrue(out)
 
 

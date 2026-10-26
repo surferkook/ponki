@@ -61,7 +61,7 @@ class MetaConversation:
             "model": self.provider.model,
             "messages": self.messages,
             "reasoning_effort": self.provider.effort,
-            "extra_body": {"prompt_cache_key": f"house-{self.label}"},
+            "prompt_cache_key": f"house-{self.label}",
         }
         if self.tools:
             kwargs["tools"] = [{"type": "function",

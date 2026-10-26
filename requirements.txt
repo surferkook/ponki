@@ -1,10 +1,10 @@
-fastapi==0.115.6
-uvicorn==0.32.1
-websockets==14.1
+# Pinned to current stable releases checked on PyPI. Where the newest line
+# needs Python 3.11+ (Pillow 13), the pin is the latest release that still
+# runs on this hub's Python 3.10.
+fastapi==0.162.0
+uvicorn==0.54.0
+websockets==16.1.1
 httpx==0.28.1
-Pillow==11.0.0
-python-dotenv==1.0.1
-openai==1.97.0
-pydantic==2.14.1
-starlette==0.41.3
-anyio==4.15.1
+Pillow==12.3.0
+python-dotenv==1.2.4
+openai==3.35.1

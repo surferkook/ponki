@@ -82,7 +82,7 @@ async def paint(name: str, picture: str, side: int = 512, fmt: str = "WEBP",
         try:
             response = await client.images.generate(
                 model="muse-image-1.0", prompt=prompt, size="1024x1024", n=1,
-                response_format="b64_json", extra_body={"output_format": "png"})
+                response_format="b64_json", output_format="png")
             break
         except Exception as exc:
             last_exc = exc

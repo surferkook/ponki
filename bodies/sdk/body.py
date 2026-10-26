@@ -65,6 +65,7 @@ class Body:
         self._handlers: dict[str, Callable] = {}
         self.state: dict[str, Any] = {}
         self._ws: Any = None
+        self._welcomed = False
         self._logger = logging.getLogger(f"body.{name}")
 
     # -- declaring actions -------------------------------------------------
@@ -191,6 +192,7 @@ class Body:
             if not isinstance(msg, dict) or msg.get("type") != "welcome":
                 raise RuntimeError(f"hub did not welcome us: {msg!r}")
             got_welcome = True
+            self._welcomed = True
             self._logger.info("welcomed as %s by %s", msg.get("name"), self.hub_url)
             if self.state:
                 await ws.send(json.dumps({"type": "state", "state": dict(self.state)}))
@@ -216,15 +218,16 @@ class Body:
             asyncio.ensure_future(bg() if callable(bg) and not inspect.iscoroutine(bg) else bg)
         delay = 1.0
         while True:
-            got_welcome = False
+            self._welcomed = False
             try:
-                got_welcome = await self._session()
+                await self._session()
+                self._welcomed = True  # a clean close still had its welcome
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 self._logger.info("hub unreachable (%s) — retrying in %gs",
                                   exc, round(delay))
-            if got_welcome:
+            if self._welcomed:  # the hub restarted: start again at 1 s
                 delay = 1.0
             await asyncio.sleep(delay + random.uniform(0, 1))
             delay = min(delay * 2, 30.0)
