@@ -1,5 +1,5 @@
 [Unit]
-Description=Ponki house — the hub (souls, the record, the web UI)
+Description=Ponkihouse hub — the house itself (souls, the record, the web UI)
 After=network.target tailscaled.service
 Wants=tailscaled.service
 

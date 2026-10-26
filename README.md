@@ -33,13 +33,13 @@ Tests (standard library only, no hardware, no model calls):
 
 ## Run it as a service (this NUC)
 
-All house services are prefixed `ponki-`: the hub is `ponki-house`
-(later: `ponki-voice`, `ponki-ears`, `ponki-sam`, `ponki-workshop`).
+All house services are prefixed `ponkihouse-`: the hub is `ponkihouse-hub`
+(later: `ponkihouse-voice`, `ponkihouse-ears`, `ponkihouse-sam`, `ponkihouse-workshop`).
 
 ```bash
-sudo cp deploy/ponki-house.service /etc/systemd/system/
+sudo cp deploy/ponkihouse-hub.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now ponki-house
+sudo systemctl enable --now ponkihouse-hub
 sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
 ```
 

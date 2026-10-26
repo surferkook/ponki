@@ -88,7 +88,7 @@ class HouseRegistry(unittest.TestCase):
             self.assertEqual(house.resolve("Keiki"), "eye")
             self.assertIn("Keiki", house.soul("eye").persona)
             self.assertEqual(house.manifests["eye"]["description"], "Keiki is a camera.")
-            news = " ".join(str(n) for n in house.soul("buddy").news)
+            news = " ".join(str(n) for n in house.soul("buddy").data["news"])
             self.assertIn("new name: Keiki", news)
 
     def test_a_name_is_used_once(self) -> None:
@@ -122,9 +122,9 @@ class HouseRegistry(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             house = make_house(tmp)
             entry = house.remove("eye")
-            self.assertTrue(any("has moved on." in str(n) for n in house.soul("buddy").news))
+            self.assertTrue(any("has moved on." in str(n) for n in house.soul("buddy").data["news"]))
             house.bring_back(entry["id"])
-            self.assertFalse(any("has moved on." in str(n) for n in house.soul("buddy").news))
+            self.assertFalse(any("has moved on." in str(n) for n in house.soul("buddy").data["news"]))
 
     def test_reconnect_replaces_and_late_detach_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

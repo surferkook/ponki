@@ -35,7 +35,9 @@ from . import apilog  # noqa: E402
 from .export import export_media, format_event_line  # noqa: E402
 from .house import House  # noqa: E402
 from .imaging import for_model  # noqa: E402
-from .providers import StubProvider  # noqa: E402
+from . import pricing as pricing_mod  # noqa: E402
+from . import voice as voice_mod  # noqa: E402
+from .providers import get_provider  # noqa: E402
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 CSP = {"Content-Security-Policy": "default-src 'none'; sandbox"}
@@ -99,7 +101,11 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
     house_token = os.environ.get("HOUSE_TOKEN", "") if token is None else token
     if not house_token:
         print("WARNING: HOUSE_TOKEN is empty — any body may connect (dev only)")
-    house = House(StubProvider(), os.environ.get("HOUSE_HUMAN", "your human"), data_dir)
+    try:
+        provider = get_provider("")
+    except ValueError as exc:  # a contributor model or a bad effort fails at start-up
+        raise SystemExit(f"cannot start the hub: {exc}")
+    house = House(provider, os.environ.get("HOUSE_HUMAN", "your human"), data_dir)
     threading.Thread(target=_fingerprint_sweep, args=(house,), daemon=True).start()
 
     app = FastAPI(title="Ponki")
@@ -144,8 +150,8 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/info")
     async def info():
-        price = ({"in": 1.25, "out": 4.25, "cached": 0.15}
-                 if house.model.startswith("muse-spark") else None)
+        found = pricing_mod.price_for(house.model)
+        price = ({"in": found[0], "out": found[1], "cached": found[2]} if found else None)
         return {"provider": house.provider_name, "model": house.model,
                 "human": house.human, "price": price,
                 "ui": STATIC.stat().st_mtime if STATIC.exists() else 0,
@@ -172,9 +178,6 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
             reply = await house._run_turn(rid, text, "human")
         except Exception as exc:
             raise HTTPException(502, f"brain error: {exc}")
-        if not reply:
-            reply = (f"{house.label(rid)} heard you. Their brain arrives in step 2 "
-                     f"(spec 03) — for now, try their actions on the Body tab.")
         return {"reply": reply}
 
     @app.post("/api/robots/{rid}/act")
@@ -243,17 +246,24 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/robots/{rid}/portrait.webp")
     async def portrait(rid: str):
-        path = house.data_dir / "portraits" / f"{rid}.webp"
-        if not path.exists():
+        import base64 as _b64
+
+        if rid not in house.manifests:
             return JSONResponse({"detail": "no portrait yet"}, status_code=404, headers=CSP)
-        return FileResponse(path, media_type="image/webp", headers=CSP)
+        data = house.soul(rid).data.get("portrait")
+        if not data:
+            return JSONResponse({"detail": "no portrait yet"}, status_code=404, headers=CSP)
+        return Response(_b64.b64decode(data), media_type="image/webp",
+                        headers={**CSP, "Cache-Control": "max-age=86400"})
 
     @app.post("/api/robots/{rid}/portrait")
     async def draw_portrait(rid: str):
         _robot(rid)
-        if house.soul(rid).data.get("painting"):
+        soul = house.soul(rid)
+        if soul.data.get("painting"):
             raise HTTPException(409, "already drawing")
-        raise HTTPException(501, "portraits arrive with souls in step 2 (spec 03)")
+        house.spawn(soul.paint(house.manifest(rid)))
+        return {"ok": True, "painting": True}
 
     @app.put("/api/robots/{rid}/persona")
     async def persona(rid: str, payload: dict):
@@ -261,43 +271,33 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         text = (payload.get("persona") or "").strip()
         if len(text) < 10:
             raise HTTPException(400, "write at least a sentence about who this robot is")
-        house.soul(rid).set_persona(text[:4000])
+        await house.soul(rid).set_persona(text[:4000])
         house.emit("soul_edited", rid)
         return {"ok": True}
 
     @app.post("/api/robots/{rid}/reset")
     async def reset(rid: str, payload: dict):
         _robot(rid)
-        soul = house.soul(rid)
         forget = bool(payload.get("forget"))
-        soul.data["conversation"] = []
-        if forget:
-            soul.data["journal"] = []
-        soul.save()
+        await house.soul(rid).reset(forget=forget)
         house.emit("reset", rid, forget=forget)
         return {"ok": True}
 
     @app.delete("/api/robots/{rid}/promises/{n}")
     async def drop_promise(rid: str, n: int):
         _robot(rid)
-        soul = house.soul(rid)
-        promises = soul.data.setdefault("promises", [])
-        if not 1 <= n <= len(promises):
+        try:
+            house.soul(rid).drop_promise(n)
+        except IndexError:
             raise HTTPException(404, "no promise with that number")
-        dropped = promises.pop(n - 1)
-        soul.save()
-        text = dropped.get("text", "") if isinstance(dropped, dict) else str(dropped)
-        house.emit("promise", rid, text=text, dropped=True)
         return {"ok": True}
 
     @app.put("/api/robots/{rid}/voice")
     async def set_voice(rid: str, payload: dict):
         _robot(rid)
-        soul = house.soul(rid)
-        soul.data["house_voice"] = {"id": payload.get("id", ""),
-                                    "pitch": payload.get("pitch", 1.0),
-                                    "speed": payload.get("speed", 1.0)}
-        soul.save()
+        house.soul(rid).set_voice({"id": payload.get("id", ""),
+                                   "pitch": payload.get("pitch", 1.0),
+                                   "speed": payload.get("speed", 1.0)})
         house.emit("voice_changed", rid)
         return {"ok": True}
 
@@ -310,7 +310,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/voices")
     async def voices():
-        return VOICES
+        return voice_mod.VOICES
 
     @app.get("/api/voice/{name}")
     async def voice_clip(name: str):
@@ -407,10 +407,17 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/departed/{entry_id}/portrait.webp")
     async def departed_portrait(entry_id: str):
-        path = house.data_dir / "departed" / entry_id / "portrait.webp"
-        if not path.exists():
+        import base64 as _b64
+
+        try:
+            _entry, soul_data = house.remembrance(entry_id)
+        except ValueError:
             return JSONResponse({"detail": "no portrait kept"}, status_code=404, headers=CSP)
-        return FileResponse(path, media_type="image/webp", headers=CSP)
+        data = soul_data.get("portrait")
+        if not data:
+            return JSONResponse({"detail": "no portrait kept"}, status_code=404, headers=CSP)
+        return Response(_b64.b64decode(data), media_type="image/webp",
+                        headers={**CSP, "Cache-Control": "max-age=86400"})
 
     # -- house settings, mic, system, logs --------------------------------------------
     @app.get("/api/house")

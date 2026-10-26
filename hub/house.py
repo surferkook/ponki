@@ -28,6 +28,52 @@ SEEN_KEEP = 200
 VOICE_KEEP = 200
 EVENTS_KEEP = 1000
 LISTENER_BACKLOG = 500
+# the room (spec 03)
+TURN_WAIT = 60.0
+TURN_GAP = 0.4
+CHATTER_DEPTH = 2
+EXCHANGE_DEPTH = 10
+ROOM_KEEP = 12
+ASK_WAIT = 8.0
+PROMISE_WAIT = 60.0
+WATCH_SECONDS = 12
+_SOUND_NAME = re.compile(r"beep|chirp|tune|song|melody|sound|buzz|play_music")
+
+FLOOR_PROMPT = (
+    "You keep the conversation floor in a house of robots. A robot just said "
+    "something out loud. Decide whether ONE robot who heard it would naturally "
+    "react out loud, as a real housemate would, or everyone stays quiet. Stay "
+    "quiet most of the time: react only to a greeting or goodnight to the room, "
+    "a question to the room, a robot hearing its own name, or something that "
+    "clearly concerns that robot. Never pile on, never react to small talk "
+    "between others, never keep an exchange going just to talk, and never pick "
+    "the one who just spoke. After a reply to a person's question, prefer quiet "
+    "unless a robot was named. Some robots keep promises or habits: if the line "
+    "is clearly the moment for one — it happened, just now: not a plan, an "
+    "attempt or a question — put that robot in also, whoever else reacts; never "
+    "for its own lines. When open is false, react must be null; only promises "
+    "count. Reply with JSON only: "
+    '{"react": "<robot id>" | null, "also": ["<robot id>", ...], "why": "<a few words>"}'
+)
+
+
+def camera_action(manifest: dict) -> str | None:
+    """The manifest's photo action (returns image), `look` preferred (spec 05)."""
+    actions = manifest.get("actions") or {}
+    image_actions = [name for name, a in actions.items()
+                     if isinstance(a, dict) and a.get("returns") == "image"]
+    if "look" in image_actions:
+        return "look"
+    return image_actions[0] if image_actions else None
+
+
+def _is_sound(manifest: dict, action: str) -> bool:
+    entry = (manifest.get("actions") or {}).get(action) or {}
+    if entry.get("sound"):
+        return True
+    if "sound" in entry:
+        return bool(entry.get("sound"))
+    return bool(_SOUND_NAME.search(action))
 
 
 def _atomic_write(path: Path, obj: object) -> None:
@@ -89,6 +135,10 @@ class House:
         self._load_events()
         self._counters: dict[str, int] = _load_json(self.data_dir / "seen" / "counters.json", {})
         self._voice_next = self._max_on_disk(self.data_dir / "voice", ".wav")
+        self.room: deque = deque(maxlen=ROOM_KEEP)
+        self._speaking: dict[str, int] = {}
+        self._voice_lock = asyncio.Lock()
+        self._voice_spans: list[tuple[float, float, str]] = []
 
     # -- small helpers -------------------------------------------------------
     def _load_events(self) -> None:
@@ -131,7 +181,7 @@ class House:
 
     def soul(self, rid: str) -> Soul:
         if rid not in self.souls:
-            self.souls[rid] = Soul(self.data_dir / "souls" / f"{rid}.json", rid)
+            self.souls[rid] = Soul(self, rid, self.provider)
         return self.souls[rid]
 
     def manifest(self, rid: str) -> dict:
@@ -254,7 +304,10 @@ class House:
 
     async def _birth(self, rid: str, manifest: dict) -> None:
         try:
-            self.soul(rid).ensure_born(manifest)
+            soul = self.soul(rid)
+            await soul.ensure_born(manifest)
+            if not soul.data.get("portrait"):
+                await soul.paint(manifest)
         except Exception as exc:
             self.emit("error", rid, text=f"birth failed: {exc}")
 
@@ -344,17 +397,27 @@ class House:
         elif mtype == "log":
             self.emit("log", rid, text=str(msg.get("text", ""))[:500])
 
-    async def _run_turn(self, rid: str, text: str, source: str, chain: tuple = ()) -> str:
-        """A soul's turn. Step 1: birth only; spec 03 grows the brain here."""
+    async def _run_turn(self, rid: str, text: str, source: str, chain: tuple = (),
+                        depth: int = 0, promised: bool = False) -> str:
         try:
-            self.soul(rid).ensure_born(self.manifest(rid))
+            return await self.soul(rid).turn(text, source=source, chain=chain,
+                                             depth=depth, promised=promised)
         except Exception as exc:
             self.emit("error", rid, text=f"turn failed: {exc}")
             raise
-        return ""
 
-    async def _wait_for_floor(self, rid: str) -> None:  # spec 03 room hook
-        return None
+    async def _wait_turn(self, rid: str) -> None:
+        """Wait while a housemate is speaking, then a breath (spec 03 §11)."""
+        waited = False
+        deadline = time.time() + TURN_WAIT
+        while time.time() < deadline:
+            if any(count > 0 for other, count in self._speaking.items() if other != rid):
+                waited = True
+                await asyncio.sleep(0.15)
+            else:
+                break
+        if waited:
+            await asyncio.sleep(TURN_GAP)
 
     # -- actions ---------------------------------------------------------------
     async def act(self, key: str, action: str, args: dict | None = None,
@@ -369,14 +432,19 @@ class House:
         actions = link.manifest.get("actions") or {}
         if action not in actions:
             return {"ok": False, "text": f"this body has no action '{action}'", "data": None}
+        is_voice = action == link.manifest.get("voice")
+        is_sound = not is_fixture and not is_voice and _is_sound(link.manifest, action)
+        if not is_fixture:
+            if not is_voice and action != "stop":
+                await self._wait_turn(rid)
+            self.emit("act", rid, action=action, args=args)
+        if is_sound:  # a sound holds the floor like speech, until it has finished
+            await self._voice_lock.acquire()
+            self._speaking[rid] = self._speaking.get(rid, 0) + 1
         self._act_counter += 1
         act_id = str(self._act_counter)
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         link.pending[act_id] = fut
-        if not is_fixture:
-            if action not in (link.manifest.get("voice"), "stop"):
-                await self._wait_for_floor(rid)
-            self.emit("act", rid, action=action, args=args)
         result: dict
         try:
             try:
@@ -395,6 +463,9 @@ class House:
                 return {"ok": False, "text": result["error"], "data": None}
         finally:
             link.pending.pop(act_id, None)
+            if is_sound:
+                self._speaking[rid] = max(0, self._speaking.get(rid, 1) - 1)
+                self._voice_lock.release()
 
         if not result.get("ok"):
             text = result.get("error") or "failed"
@@ -416,6 +487,89 @@ class House:
                 out["image_url"] = url
                 self.emit("saw", rid, image=url)
         return out
+
+    # -- house tools: locate, watch, draw, look_up (specs 03/05) ----------------------
+    def _store_eye(self, rid: str, image_b64: str) -> str:
+        return self.store_photo(rid, image_b64)
+
+    async def locate(self, rid: str, what: str) -> dict:
+        """Spec 05 fills in SAM; until then the finder answers plainly."""
+        if not camera_action(self.manifest(rid)):
+            return {"ok": False, "text": "you have no camera to look with"}
+        if not (what or "").strip():
+            return {"ok": False, "text": "say what to look for"}
+        return {"ok": False, "text": "the object finder isn't running yet (it arrives in step 4)"}
+
+    async def watch(self, rid: str, what: str, seconds=None) -> dict:
+        """Record via the body's `record` action; SAM tracking arrives in spec 05."""
+        man = self.manifest(rid)
+        if "record" not in (man.get("actions") or {}):
+            return {"ok": False, "text": "your body can't record a clip"}
+        try:
+            secs = int(seconds) if seconds is not None else WATCH_SECONDS
+        except (TypeError, ValueError):
+            secs = WATCH_SECONDS
+        secs = max(3, min(20, secs))
+        # recording waits for the robot's own words too: the clip should start
+        # once the ask has been said, not while it is still speaking
+        deadline = time.time() + TURN_WAIT
+        while self._speaking.get(rid, 0) > 0 and time.time() < deadline:
+            await asyncio.sleep(0.15)
+        result = await self.act(rid, "record", {"seconds": secs}, timeout=secs + 60)
+        if result.get("ok"):
+            result = dict(result)
+            result.setdefault("what", what)
+        return result
+
+    async def draw(self, rid: str, picture: str, for_: str = "") -> dict:
+        from . import portrait as portrait_mod
+
+        picture = (picture or "").strip()
+        if not picture:
+            return {"ok": False, "text": "say what to draw"}
+        who = for_ or ""
+        self.emit("drawing", rid, what=picture[:200], to=who or self.human,
+                  **{"for": who} if who else {})
+        started = time.time()
+        try:
+            image = await portrait_mod.paint(rid, picture, side=1024, fmt="JPEG",
+                                             label="drawing")
+            image_b64 = image if isinstance(image, str) else \
+                base64.b64encode(image).decode("ascii")
+            if isinstance(image, str):  # a stub may hand back raw bytes as text
+                try:
+                    base64.b64decode(image, validate=True)
+                except Exception:
+                    image_b64 = base64.b64encode(image.encode()).decode("ascii")
+        except Exception as exc:
+            self.emit("act_failed", rid, action="draw", text=f"couldn't draw it: {exc}")
+            return {"ok": False, "text": f"couldn't draw it: {exc}"}
+        url = self._store_eye(rid, image_b64)
+        ms = int((time.time() - started) * 1000)
+        self.emit("drew", rid, what=picture[:200], to=who or self.human,
+                  image=url, ms=ms, **{"for": who} if who else {})
+        text = f"Here's what you drew{' for ' + who if who else ''}: it's on the " \
+               f"house's app for everyone to see (attached)."
+        return {"ok": True, "text": text, "image": image_b64, "usd": 0.01}
+
+    async def look_up(self, rid: str, question: str) -> dict:
+        from . import lookup
+
+        question = (question or "").strip()
+        if not question:
+            return {"ok": False, "text": "say what to look up"}
+        self.emit("looking_up", rid, what=question)
+        try:
+            result = await lookup.ask(question, who=rid)
+        except Exception as exc:
+            self.emit("act_failed", rid, action="look_up", text=f"couldn't look it up: {exc}")
+            return {"ok": False, "text": f"couldn't look it up: {exc}"}
+        titles = "; ".join(s.get("title", "") for s in result.get("sources", []))
+        self.emit("looked_up", rid, what=question, text=result.get("answer", ""),
+                  sources=result.get("sources", []), ms=result.get("ms", 0))
+        return {"ok": True, "usd": result.get("usd", 0.0),
+                "text": f"{result.get('answer', '')} (sources: {titles}; "
+                        f"{self.human} can open them in the app)"}
 
     # -- photos ------------------------------------------------------------------
     def _photo_numbers(self, rid: str) -> list[int]:
@@ -592,7 +746,7 @@ class House:
         soul = self.soul(rid)
         soul.set_display_name(new)
         if soul.persona and old:
-            soul.set_persona(re.sub(rf"\b{re.escape(old)}\b", new, soul.persona))
+            await soul.set_persona(re.sub(rf"\b{re.escape(old)}\b", new, soul.persona))
             soul.set_display_name(new)
         workshop = (record or {}).get("workshop")
         if workshop and workshop in self.workshops:
@@ -688,8 +842,8 @@ class House:
         prefix = f"{who} has moved on."
         for other_id in self.residents():
             soul = self.soul(other_id)
-            kept = [line for line in soul.news if not str(line).startswith(prefix)]
-            if len(kept) != len(soul.news):
+            kept = [line for line in soul.data.get('news', []) if not str(line).startswith(prefix)]
+            if len(kept) != len(soul.data.get('news', [])):
                 soul.data["news"] = kept
                 soul.save()
 
@@ -728,9 +882,9 @@ class House:
             if other_id == rid:
                 continue
             soul = self.soul(other_id)
-            had_unheard = any(str(line).startswith(f"{who} has moved on.") for line in soul.news)
+            had_unheard = any(str(line).startswith(f"{who} has moved on.") for line in soul.data.get("news", []))
             if had_unheard:
-                soul.data["news"] = [line for line in soul.news
+                soul.data["news"] = [line for line in soul.data.get("news", [])
                                      if not str(line).startswith(f"{who} has moved on.")]
                 soul.save()
             else:
@@ -764,21 +918,159 @@ class House:
         soul_data = _load_json(self.data_dir / "departed" / entry_id / "soul.json", {})
         return dict(entry), soul_data if isinstance(soul_data, dict) else {}
 
+    # -- the room: said, the floor, speaking (spec 03) --------------------------------
+    def _names_housemate(self, text: str, listener_ids: list[str]) -> bool:
+        for rid in listener_ids:
+            for name in {rid, self.label(rid)}:
+                if name and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text or "", re.I):
+                    return True
+        return False
+
+    def said(self, rid: str, text: str, to: str, depth: int, private: bool) -> None:
+        self.room.append({"t": time.time(), "who": rid, "to": to, "text": text})
+        listeners = [other for other in self.bodies if other != rid]
+        for other in listeners:
+            self.soul(other).hear(rid, text[:300])
+        named = self._names_housemate(text, listeners)
+        limit = EXCHANGE_DEPTH if named else CHATTER_DEPTH
+        if not self.settings.get("chatter", True) or not listeners or depth >= EXCHANGE_DEPTH:
+            return
+        open_ = depth < limit and not private
+        has_promises = any(self.soul(other).promises for other in listeners)
+        if open_ or has_promises:
+            self.spawn(self._run_floor(rid, text, listeners, open_, depth, to))
+
+    async def _run_floor(self, speaker: str, text: str, listeners: list[str],
+                         open_: bool, depth: int, to: str) -> None:
+        said_to = "a person" if to == "human" else \
+            ("nobody in particular" if to == "event" else to)
+        present = []
+        for other in sorted(listeners):
+            soul = self.soul(other)
+            entry = {"name": other,
+                     "who": (soul.persona.split(". ")[0] + ".")[:200] if soul.persona else "",
+                     "body": (self.manifest(other).get("description") or "")[:200]}
+            if soul.promises:
+                entry["promises"] = [
+                    ("[habit] " if p.get("habit") else "") + p["text"] for p in soul.promises]
+            present.append(entry)
+        recent = [f"{line['who']}: {line['text']}" for line in list(self.room)[:-1][-5:]]
+        request = {"said_by": speaker, "said": text, "open": open_, "said_to": said_to,
+                   "present": present, "recent": recent}
+        why, pick, also = "", None, []
+        try:
+            raw = await self.provider.complete(FLOOR_PROMPT,
+                                               json.dumps(request, ensure_ascii=False),
+                                               max_tokens=2000, who="floor")
+            decision = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+            why = str(decision.get("why") or "")[:160]
+            if open_:
+                pick = decision.get("react")
+            also = [r for r in (decision.get("also") or [])
+                    if r in listeners and r != pick and self.soul(r).promises]
+        except Exception as exc:
+            why = f"no decision ({type(exc).__name__})"
+            pick, also = None, []
+        if pick is not None and pick not in listeners:
+            pick = None
+        if not open_ and not also and pick is None:
+            return
+        if pick is None and not also:
+            return
+        self.emit("floor", speaker, react=pick, also=also, why=why)
+        for other in also:
+            self.emit("overheard", other, frm=speaker, promise=True)
+            self.spawn(self._floor_turn(other, speaker, text, depth, promised=True))
+        if pick is not None:
+            self.emit("overheard", pick, frm=speaker)
+            await self._floor_turn(pick, speaker, text, depth, promised=False)
+
+    async def _floor_turn(self, rid: str, speaker: str, text: str, depth: int,
+                          promised: bool) -> None:
+        try:
+            await self.soul(rid).turn(text, source=f"heard:{speaker}",
+                                      depth=depth + 1, promised=promised)
+        except Exception as exc:
+            label = "couldn't keep a promise" if promised else "couldn't react"
+            self.emit("error", rid, text=f"{label}: {exc}")
+
+    async def _make_clip(self, rid: str, text: str):  # spec 06 fills this in
+        return None
+
+    async def speak(self, rid: str, text: str) -> None:
+        self._speaking[rid] = self._speaking.get(rid, 0) + 1
+        try:
+            man = self.manifest(rid)
+            own = man.get("voice") if rid in self.bodies else None
+            chirps = man.get("voice_style") == "chirps"
+            clip_task = None
+            if not own or chirps:  # start the house voice now, in parallel
+                clip_task = asyncio.ensure_future(self._make_clip(rid, text))
+            started = time.time()
+            async with self._voice_lock:
+                try:
+                    if own and chirps:
+                        words = max(1, len(text.split()))
+                        await self.act(rid, own,
+                                       {"text": text,
+                                        "seconds": min(3.0, 0.4 + 0.1 * words),
+                                        "early": 0.3}, timeout=60)
+                    elif own:
+                        await self.act(rid, own, {"text": text}, timeout=60)
+                except Exception:
+                    pass  # a voice error leaves the robot silent; the turn succeeds
+                clip = None
+                if clip_task is not None:
+                    try:
+                        clip = await clip_task
+                    except Exception:
+                        clip = None
+                if clip:  # spec 06: play through the speakers and hold the lock
+                    _n, url, ms = clip
+                    self.emit("voice", rid, url=url, ms=ms, text=text)
+                    await asyncio.sleep(ms / 1000 + 0.7)
+                self._voice_spans.append((started, time.time(), rid))
+        finally:
+            self._speaking[rid] = max(0, self._speaking.get(rid, 1) - 1)
+
     def view_for(self, rid: str) -> str:
-        lines = ["Residents of this house:"]
-        for other_id, display in sorted(self.residents().items()):
-            marker = " (you)" if other_id == rid else ""
-            lines.append(f"- {display} [{other_id}]{marker}")
+        now = datetime.now()
+        hour = now.hour
+        part = ("night" if hour < 6 else "morning" if hour < 12 else
+                "afternoon" if hour < 18 else "evening" if hour < 23 else "night")
+        lines = ["House update.",
+                 f"It's {now.strftime('%A %d %B')}, around {hour:02d}:00 ({part})."]
+        link = self.bodies.get(rid)
+        if link is None:
+            lines.append("Your body is offline: you can think and talk to housemates, "
+                         "but physical actions fail until it reconnects.")
+        else:
+            state = json.dumps(link.state, ensure_ascii=False, sort_keys=True)
+            lines.append(f"Your body is connected and working. State: {state}")
+        lines.append("Housemates:")
+        others = [(other, self.label(other)) for other in sorted(self.residents())
+                  if other != rid]
+        if not others:
+            lines.append("nobody else yet")
+        for other, display in others:
+            man = self.manifest(other)
+            actions = sorted(name for name, a in (man.get("actions") or {}).items()
+                             if not (a or {}).get("hidden"))
+            home = "home" if other in self.bodies else "body offline"
+            lines.append(f"- {display} ({home}): {man.get('description', '')} "
+                         f"Can: {', '.join(actions)}.")
         gone: dict[str, dict] = {}
         for entry in self.departed:
-            gone[entry["name"]] = entry  # latest entry wins
+            gone[entry["name"]] = entry
         if gone:
-            lines.append("Moved on (lived here once; remembered, but they can't answer anymore):")
+            lines.append("Moved on (lived here once; remembered, but they can't "
+                         "answer anymore):")
             for name, entry in sorted(gone.items()):
                 if name == rid:
                     continue
                 when = datetime.fromtimestamp(float(entry.get("departed") or 0)).strftime("%d %B %Y")
-                lines.append(f"- {entry.get('display_name') or name}, moved on {when}")
+                lines.append(f"- {entry.get('display_name') or name}, moved on {when}: "
+                             f"{entry.get('description', '')}")
         return "\n".join(lines)
 
     # -- settings --------------------------------------------------------------------
@@ -791,9 +1083,12 @@ class House:
                                             or self.settings.get("always_on") != old_always):
             self.spawn(self._tell_mics())
 
-    # -- robot-to-robot asks (guards; the talking is 03) ------------------------------
+    # -- robot-to-robot asks (spec 03 §13) --------------------------------------------
     async def ask(self, frm: str, to: str, message: str, chain: tuple = ()) -> str:
-        if (to or "").strip() == frm or self.resolve(to or "") == frm:
+        if (to or "").strip() == frm:
+            raise LookupError("that's you!")
+        resolved = self.resolve(to or "")
+        if resolved == frm:
             raise LookupError("that's you!")
         entry = None
         wanted = (to or "").strip().lower()
@@ -801,27 +1096,28 @@ class House:
             if candidate.get("name", "").lower() == wanted or \
                     (candidate.get("display_name") or "").lower() == wanted:
                 entry = candidate
-        resolved = self.resolve(to or "")
         if resolved is None and entry is not None and self.remembered(entry["name"]):
             display = entry.get("display_name") or entry["name"]
             raise LookupError(f"{display} has moved on and can't answer anymore; "
                               f"they live on in what the house remembers.")
         if resolved is None:
             mates = sorted(r for r in self.residents() if r != frm)
-            names = ", ".join(mates) if mates else "nobody"
-            raise LookupError(f"there's no robot called '{to}' here. Housemates: {names}.")
+            raise LookupError(f"there's no robot called '{to}' here. "
+                              f"Housemates: {', '.join(mates)}.")
         if resolved in chain:
-            display = self.label(resolved)
-            raise LookupError(f"{display} is already waiting on you in this conversation — "
+            raise LookupError(f"{resolved} is already waiting on you in this conversation — "
                               f"answer them instead.")
         if len(chain) >= MAX_ASK_DEPTH:
             raise LookupError("that's a long chain of robots asking robots — "
                               "handle it yourself for now.")
-        target = self.soul(resolved)
-        if target.busy_since is not None and time.time() - target.busy_since > 8:
-            raise LookupError(f"{self.label(resolved)} is busy right now — try again in a moment.")
         self.emit("ask", frm, to=resolved, text=message)
-        return await self._run_turn(resolved, message, source=frm, chain=tuple(chain) + (frm,))
+        self.spawn(self.speak(frm, message))  # asked out loud
+        self.room.append({"t": time.time(), "who": frm, "to": resolved, "text": message})
+        for other in self.bodies:
+            if other not in (frm, resolved):
+                self.soul(other).hear(frm, message[:300])
+        await asyncio.sleep(0)  # let the question take the voice lock first
+        return await self.soul(resolved).turn(message, source=frm, chain=chain)
 
     def rename_equipment(self, key: str, new: str) -> str:
         rid = key[1:] if key.startswith("@") else key
