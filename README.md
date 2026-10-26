@@ -31,14 +31,21 @@ Tests (standard library only, no hardware, no model calls):
 .venv/bin/python -m unittest discover -s tests
 ```
 
-## Run it as a service (this NUC)
+## Run it as a service
 
-All house services are prefixed `ponkihouse-`: the hub is `ponkihouse-hub`
-(later: `ponkihouse-voice`, `ponkihouse-ears`, `ponkihouse-sam`, `ponkihouse-workshop`).
+Clone anywhere, then let the installer fill in where the repo lives — the
+unit files themselves carry no machine paths. Every unit on every machine
+is prefixed `ponkihouse-`: the hub is `ponkihouse-hub` (later
+`ponkihouse-voice`, `ponkihouse-ears`, `ponkihouse-sam`, and
+`ponkihouse-workshop` — the Pi's and the NUC's workshop are the same unit
+with a different `.env`).
 
 ```bash
-sudo cp deploy/ponkihouse-hub.service /etc/systemd/system/
-sudo systemctl daemon-reload
+git clone <this repo> ~/ponkihouse   # any folder works
+cd ~/ponkihouse
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env                # set HOUSE_TOKEN at least
+./deploy/install.sh                 # fills in this clone's path and your user
 sudo systemctl enable --now ponkihouse-hub
 sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
 ```
