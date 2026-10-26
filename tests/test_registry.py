@@ -52,6 +52,11 @@ class FakeWS:
 
 
 class RegistryBasics(unittest.TestCase):
+    def test_adopt_fixture_kind_on_fresh_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reg = Registry(Path(tmp) / "registry.json")
+            rec = reg.adopt("brio", kind="mic", display_name="brio")
+            self.assertEqual(rec["kind"], "mic")
     def test_upsert_adopt_pop_restore(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "registry.json"

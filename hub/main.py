@@ -73,6 +73,30 @@ def _preview_wav(pitch: float = 1.0, speed: float = 1.0) -> bytes:
     return buf.getvalue()
 
 
+async def _services(house: House) -> dict:
+    """Service health in the UI's shape: {ready, state, detail, model}."""
+    from . import grounding as grounding_mod
+    from . import hearing as hearing_mod
+
+    voice_h = await voice_mod.health()
+    ears_h = await hearing_mod.health()
+    find_h = await grounding_mod.health()
+    return {
+        "voice": {"ready": voice_h.get("state") == "ready",
+                  "state": voice_h.get("state"),
+                  "detail": house.voice_error or voice_h.get("error") or "",
+                  "speakers": sorted(house.fixtures_of("speaker"))},
+        "ears": {"ready": ears_h.get("state") == "ready",
+                 "state": ears_h.get("state"),
+                 "detail": ears_h.get("error") or "",
+                 "model": ears_h.get("model")},
+        "finding": {"ready": find_h.get("state") == "ready",
+                    "state": find_h.get("state"),
+                    "detail": find_h.get("error") or "",
+                    "model": find_h.get("model")},
+    }
+
+
 def _fingerprint_sweep(house: House) -> None:
     """Background: label any kept photo that has no fingerprint label yet."""
     import base64
@@ -155,8 +179,8 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         return {"provider": house.provider_name, "model": house.model,
                 "human": house.human, "price": price,
                 "ui": STATIC.stat().st_mtime if STATIC.exists() else 0,
-                "voice": {"ready": False, "detail": "the house voice arrives in step 5 (spec 06)",
-                          "speakers": []}}
+                "voice": {**await voice_mod.health(),
+                          "speakers": sorted(house.fixtures_of("speaker"))}}
 
     @app.get("/api/robots")
     async def robots():
@@ -298,17 +322,29 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
     @app.put("/api/robots/{rid}/voice")
     async def set_voice(rid: str, payload: dict):
         _robot(rid)
-        house.soul(rid).set_voice({"id": payload.get("id", ""),
+        cleaned = voice_mod.clean({"id": payload.get("id", ""),
                                    "pitch": payload.get("pitch", 1.0),
                                    "speed": payload.get("speed", 1.0)})
-        house.emit("voice_changed", rid)
-        return {"ok": True}
+        if cleaned is None:
+            raise HTTPException(400, f"unknown voice '{payload.get('id', '')}'")
+        house.soul(rid).set_voice(cleaned)
+        house.emit("voice_changed", rid, voice=cleaned)
+        return {"ok": True, "voice": cleaned}
 
     @app.post("/api/robots/{rid}/voice/preview")
     async def preview_voice(rid: str, payload: dict):
         _robot(rid)
-        wav = _preview_wav(float(payload.get("pitch") or 1.0),
-                           float(payload.get("speed") or 1.0))
+        cleaned = voice_mod.clean({"id": payload.get("id", ""),
+                                   "pitch": payload.get("pitch", 1.0),
+                                   "speed": payload.get("speed", 1.0)})
+        if cleaned is None:
+            raise HTTPException(400, f"unknown voice '{payload.get('id', '')}'")
+        soul = house.soul(rid)
+        text = soul.data.get("tagline") or f"Hi, I'm {house.label(rid)}."
+        try:
+            wav, _ms = await voice_mod.synth(text, cleaned)
+        except Exception as exc:
+            raise HTTPException(503, str(exc))
         return Response(wav, media_type="audio/wav")
 
     @app.get("/api/voices")
@@ -442,18 +478,45 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     @app.get("/api/mic")
     async def mic_state():
-        mics = sorted(house.fixtures_of("mic"))
-        chosen = house.settings.get("mic")
-        return {"house_mic": chosen if chosen in mics else None,
-                "mics": mics, "always_on": bool(house.settings.get("always_on"))}
+        from . import hearing as hearing_mod
+
+        mics = []
+        for mid, link in sorted(house.fixtures_of("mic").items()):
+            record = house.registry.get(mid) or {}
+            mics.append({"name": mid,
+                         "display_name": record.get("display_name") or mid,
+                         **link.state})
+        return {"mics": mics, "house_mic": house.house_mic(),
+                "always_on": bool(house.settings.get("always_on")),
+                "ears": await hearing_mod.health()}
 
     @app.post("/api/mic/start")
-    async def mic_start():
-        raise HTTPException(409, "no house mic is online")
+    async def mic_start(payload: dict = {}):
+        mic = house.house_mic()
+        if mic is None:
+            raise HTTPException(409, "no house mic is online")
+        result = await house.act(f"@{mic}", "start", {}, timeout=10)
+        if not result.get("ok"):
+            raise HTTPException(502, result.get("text", "the mic failed"))
+        return {"ok": True}
 
     @app.post("/api/mic/stop")
     async def mic_stop(payload: dict = {}):
-        raise HTTPException(409, "no house mic is online")
+        mic = house.house_mic()
+        if mic is None:
+            raise HTTPException(409, "no house mic is online")
+        result = await house.act(f"@{mic}", "stop", {}, timeout=30)
+        if not result.get("ok"):
+            raise HTTPException(502, result.get("text", "the mic failed"))
+        data = result.get("data") or {}
+        heard = await house.heard_audio(
+            mic, data.get("audio", ""), float(data.get("seconds") or 0),
+            to=payload.get("to"), push=True)
+        if heard.get("error"):
+            raise HTTPException(502, heard["error"])
+        return {"text": heard.get("text", ""), "to": heard.get("to"),
+                "language": heard.get("language"), "seconds": heard.get("seconds"),
+                "ms": heard.get("ms"), "engine": heard.get("engine")}
 
     @app.get("/api/system")
     async def system():
@@ -487,11 +550,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         return {
             "hub": {"provider": house.provider_name, "model": house.model,
                     "since": house.started, "robots": len(house.manifests)},
-            "services": {
-                "voice": {"ready": False, "detail": "arrives in step 5 (spec 06)"},
-                "ears": {"ready": False, "detail": "arrives in step 5 (spec 06)"},
-                "finding": {"ready": False, "detail": "arrives in step 4 (spec 05)"},
-            },
+            "services": await _services(house),
             "settings": dict(house.settings),
             "house_mic": (await mic_state())["house_mic"],
             "workshops": workshops, "equipment": equipment,

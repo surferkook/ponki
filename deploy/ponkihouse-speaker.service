@@ -1,0 +1,15 @@
+[Unit]
+Description=Ponkihouse speaker — plays house-voice clips on this machine
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=@PONKI_USER@
+WorkingDirectory=@PONKI_DIR@
+ExecStart=@PONKI_DIR@/.venv/bin/python -u bodies/speaker/speaker_fixture.py
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=@PONKI_DIR@/.env
+
+[Install]
+WantedBy=multi-user.target

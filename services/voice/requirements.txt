@@ -1,0 +1,12 @@
+# The house voice's own venv (Python 3.10 on the NUC). Torch is the official
+# CPU wheel; Kokoro/Piper models are fetched once at setup (see README).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+kokoro==0.9.4
+misaki==0.9.4
+piper-tts==1.4.2
+numpy==2.2.6
+scipy==1.15.3
+soundfile==0.14.0
+fastapi==0.162.0
+uvicorn==0.54.0

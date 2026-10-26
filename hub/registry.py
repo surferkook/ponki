@@ -71,7 +71,10 @@ class Registry:
         now = time.time()
         rec = self._data["robots"].get(rid)
         if rec is None:
-            rec = {"id": rid, "kind": "robot", "created": now, "updated": now}
+            # a fresh record takes the caller's kind (a fixture is not a robot)
+            kind = fields.get("kind")
+            rec = {"id": rid, "kind": kind if isinstance(kind, str) and kind
+                   else "robot", "created": now, "updated": now}
             self._data["robots"][rid] = rec
         changed = False
         for key, value in fields.items():

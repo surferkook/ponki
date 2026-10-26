@@ -155,7 +155,8 @@ class Soul:
             "journal": list(self.data.get("journal") or []),
             "promises": list(self.promises),
             "conversation_len": conv_len,
-            "house_voice": self.data.get("voice") or voice.default_for(self.id),
+            "house_voice": voice.clean(self.data.get("voice"))
+                           or voice.default_for(self.id),
             "usage": usage,
             "turns": list(self.data.get("turns") or [])[-20:],
         }

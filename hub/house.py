@@ -138,7 +138,9 @@ class House:
         self.room: deque = deque(maxlen=ROOM_KEEP)
         self._speaking: dict[str, int] = {}
         self._voice_lock = asyncio.Lock()
-        self._voice_spans: list[tuple[float, float, str]] = []
+        self._voice_spans: deque = deque(maxlen=20)
+        self._last_addressed: tuple[str, float] | None = None
+        self.voice_error: str | None = None
 
     # -- small helpers -------------------------------------------------------
     def _load_events(self) -> None:
@@ -340,11 +342,84 @@ class House:
         except Exception:
             pass
 
-    async def _tell_mics(self) -> None:  # spec 06 fills this in
-        return None
+    # -- hearing (spec 06) ---------------------------------------------------------
+    def house_mic(self) -> str | None:
+        mics = self.fixtures_of("mic")
+        chosen = self.settings.get("mic")
+        if chosen in mics:
+            return chosen
+        return sorted(mics)[0] if mics else None
 
-    async def _heard_audio(self, mic: str, audio: str, seconds: float) -> None:  # spec 06
-        return None
+    async def _tell_mics(self) -> None:
+        """Each mic: listen only if always-on and it is the house mic."""
+        chosen = self.house_mic()
+        for mid in self.fixtures_of("mic"):
+            on = bool(self.settings.get("always_on")) and mid == chosen
+            try:
+                await self.act(f"@{mid}", "listen", {"on": on}, timeout=10)
+            except Exception:
+                pass
+
+    def hear(self, text: str, to: str | None = None, via: str = "house mic"):
+        """Who spoken words are for: named, else page, else last addressed."""
+        from . import hearing as hearing_mod
+
+        target = hearing_mod.addressed(text, self.residents())
+        if target is None and to and self.resolve(to):
+            target = self.resolve(to)
+        if target is None and self._last_addressed is not None:
+            rid, when = self._last_addressed
+            if time.time() - when < 600 and rid in self.residents():
+                target = rid
+        if target is None:
+            self.emit("unheard", "", text=text, via=via)
+            return None
+        self._last_addressed = (target, time.time())
+        self.emit("heard", target, text=text, frm=self.human, via=via)
+        self.spawn(self._run_turn(target, text, "human"))
+        return target
+
+    async def heard_audio(self, mic: str, audio: str, seconds: float,
+                          to: str | None = None, push: bool = False) -> dict:
+        """One sentence from a mic: transcribe it, route it, return the result."""
+        from . import hearing as hearing_mod
+
+        if not push:
+            if not self.settings.get("always_on"):
+                return {"text": "", "ignored": True}
+            if mic != self.house_mic():
+                return {"text": "", "ignored": True}
+            now = time.time()
+            if self._voice_lock.locked():
+                return {"text": "", "ignored": True}
+            for started, ended, _rid in list(self._voice_spans):
+                if started - 0.5 < now and ended + 1.0 > now - seconds - 0.5:
+                    return {"text": "", "ignored": True}  # our own voice, not a person
+        try:
+            result = await hearing_mod.transcribe(
+                audio, keywords=sorted(self.residents().values()))
+        except Exception as exc:
+            self.emit("error", "", text=str(exc))
+            return {"text": "", "error": str(exc)}
+        billed = int(result.get("billed_seconds") or 0)
+        apilog.write({"t": time.time(), "kind": "transcribe", "who": mic,
+                      "engine": result.get("engine"), "seconds": seconds,
+                      "usd": billed * 0.18 / 3600 if billed else 0,
+                      "text": str(result.get("text", ""))[:200]})
+        text = (result.get("text") or "").strip()
+        if not text:
+            return {"text": ""}
+        if not push:
+            named = hearing_mod.addressed(text, self.residents())
+            if len(text.split()) < 2 and named is None:
+                return {"text": "", "dropped": True}  # a stray "thanks" or a cough
+        via = "push-to-talk" if push else "house mic"
+        target = self.hear(text, to=to, via=via)
+        return {**result, "text": text, "to": target}
+
+    # spec 02's spawn of a mic sentence, kept under its old name
+    async def _heard_audio(self, mic: str, audio: str, seconds: float) -> None:
+        await self.heard_audio(mic, audio, seconds)
 
     def detach(self, key: str, ws) -> None:
         is_fixture = key.startswith("@")
@@ -802,7 +877,9 @@ class House:
                           "robot": rid, "count": removed})
         return removed
 
-    # -- voice clips (numbering only; spec 06 makes them) -------------------------
+    # -- voice clips (kept: the last 30) ------------------------------------------
+    CLIP_KEEP = 30
+
     def save_clip(self, wav: bytes) -> tuple[int, str]:
         self._voice_next += 1
         n = self._voice_next
@@ -810,7 +887,7 @@ class House:
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{n}.wav").write_bytes(wav)
         try:
-            (folder / f"{n - VOICE_KEEP}.wav").unlink()
+            (folder / f"{n - self.CLIP_KEEP}.wav").unlink()
         except OSError:
             pass
         return n, f"/api/voice/{n}.wav"
@@ -1088,18 +1165,50 @@ class House:
             label = "couldn't keep a promise" if promised else "couldn't react"
             self.emit("error", rid, text=f"{label}: {exc}")
 
-    async def _make_clip(self, rid: str, text: str):  # spec 06 fills this in
-        return None
+    def _lead_in(self) -> float:
+        lead = 0.0
+        for link in self.fixtures_of("speaker").values():
+            try:
+                lead = max(lead, float(link.state.get("lead_in") or 0))
+            except (TypeError, ValueError):
+                pass
+        return lead
+
+    async def _make_clip(self, rid: str, text: str):
+        """Synthesise this robot's line in its own voice; keep the clip."""
+        from . import voice as voice_mod
+
+        v = voice_mod.clean(self.soul(rid).data.get("voice")) \
+            or voice_mod.default_for(rid)
+        try:
+            wav, ms = await voice_mod.synth(text, v)
+        except Exception as exc:
+            self.voice_error = str(exc)
+            raise
+        self.voice_error = None
+        n, url = self.save_clip(wav)
+        return n, url, ms
+
+    async def _play_clip(self, rid: str, url: str, ms: int, text: str) -> None:
+        self.emit("voice", rid, url=url, ms=ms, text=text)
+        for sid in self.fixtures_of("speaker"):
+            self.spawn(self.act(f"@{sid}", "play", {"url": url}, timeout=60))
+        await asyncio.sleep(ms / 1000 + self._lead_in() + 0.4)  # hold the floor
 
     async def speak(self, rid: str, text: str) -> None:
         self._speaking[rid] = self._speaking.get(rid, 0) + 1
         try:
             man = self.manifest(rid)
+            has_voice = bool(man.get("voice"))
             own = man.get("voice") if rid in self.bodies else None
             chirps = man.get("voice_style") == "chirps"
             clip_task = None
-            if not own or chirps:  # start the house voice now, in parallel
+            # The clip is made before the lock, on purpose: synthesis runs
+            # while the previous speaker is still talking.
+            if not has_voice or chirps:
                 clip_task = asyncio.ensure_future(self._make_clip(rid, text))
+            # a robot with its own speaker, offline, says nothing: the house
+            # voice doesn't stand in for a speaker that exists
             started = time.time()
             async with self._voice_lock:
                 try:
@@ -1108,7 +1217,7 @@ class House:
                         await self.act(rid, own,
                                        {"text": text,
                                         "seconds": min(3.0, 0.4 + 0.1 * words),
-                                        "early": 0.3}, timeout=60)
+                                        "early": self._lead_in()}, timeout=60)
                     elif own:
                         await self.act(rid, own, {"text": text}, timeout=60)
                 except Exception:
@@ -1119,10 +1228,9 @@ class House:
                         clip = await clip_task
                     except Exception:
                         clip = None
-                if clip:  # spec 06: play through the speakers and hold the lock
+                if clip:
                     _n, url, ms = clip
-                    self.emit("voice", rid, url=url, ms=ms, text=text)
-                    await asyncio.sleep(ms / 1000 + 0.7)
+                    await self._play_clip(rid, url, ms, text)
                 self._voice_spans.append((started, time.time(), rid))
         finally:
             self._speaking[rid] = max(0, self._speaking.get(rid, 1) - 1)

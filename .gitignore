@@ -6,6 +6,9 @@ data/
 # Node (the SAM mask-decoder worker)
 node_modules/
 
+# Piper voice models (downloaded at setup, ~60 MB each)
+services/voice/voices/
+
 # Python
 __pycache__/
 *.py[cod]

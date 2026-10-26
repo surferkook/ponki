@@ -453,7 +453,8 @@ function bodyHTML(r){
       <form class="composer" id="findform"><input type="text" id="findtext" placeholder="plant, red mug, person…">
       <button type="submit">Find</button></form><p class="hint" id="findmsg">Find marks every match of a thing's name in a fresh photo (SAM 3.1). A question goes to ${esc(disp(r))} instead, who answers in Talk.</p>
       ${S.grounding&&!S.grounding.ready?`<p class="hint">The object finder is not running (or: waiting for model access), so Find won't work yet.</p>`:""}
-      ${found?`<p>${(found.found||[]).map((f,i)=>`#${i+1} ${esc(found.what||"")} at x ${f.x??""}, y ${f.y??""} · ${f.area??""}% of view · ${f.score??""}`).join("<br>")}</p>`:""}
+      ${found?`<p>${(Array.isArray(found.found)?found.found.map(f=>[found.what||"",f]):Object.entries(found.found||{}).flatMap(([w,fs])=>(fs||[]).map(f=>[w,f]))).map(([w,f],i)=>{const c=f.center||[f.x,f.y],pct=v=>v==null?"?":(+(v*100).toFixed(v<0.01?2:1));
+        return `#${f.n??i+1} ${esc(w)} at x ${c[0]??"?"}, y ${c[1]??"?"} · ${pct(f.area)}% of view · confidence ${f.score??"?"}`}).join("<br>")}</p>`:""}
       </div>`}
   const st=Object.entries(r.state||{});
   h+=`<div class="card"><h2>State</h2>${st.length?`<div class="statepills">${st.map(([k,v])=>

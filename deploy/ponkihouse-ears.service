@@ -1,0 +1,15 @@
+[Unit]
+Description=Ponkihouse ears — Muse Voice Transcribe with a whisper fallback
+After=network.target
+
+[Service]
+Type=simple
+User=@PONKI_USER@
+WorkingDirectory=@PONKI_DIR@/services/ears
+ExecStart=@PONKI_DIR@/services/ears/.venv/bin/uvicorn ears_server:app --host 127.0.0.1 --port 8203
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=@PONKI_DIR@/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Ponkihouse Bluetooth speaker keepalive — bonded, connected, at volume
+After=bluetooth.service bluealsa.service
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+User=@PONKI_USER@
+WorkingDirectory=@PONKI_DIR@
+ExecStart=/bin/sh @PONKI_DIR@/bodies/speaker/bt_keepalive.sh ${SPEAKER_MAC} ${SPEAKER_VOLUME:-70%}
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=@PONKI_DIR@/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -25,6 +25,32 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 Open http://localhost:8200/ — the tester robot appears on the board and its
 actions run from the Body tab.
 
+## The house voice and hearing
+
+Robots without a speaker speak through the house voice (Kokoro + Piper,
+all 48 kHz), and the house hears people through a mic fixture and the ears
+(Muse Voice Transcribe, with faster-whisper offline as fallback).
+
+```bash
+python3 -m venv services/voice/.venv
+services/voice/.venv/bin/pip install -r services/voice/requirements.txt
+# Piper models (not in git), from rhasspy/piper-voices on Hugging Face:
+#   en/en_US/{amy,hfc_female,ryan}/medium/*.onnx(+ .json) → services/voice/voices/
+python3 -m venv services/ears/.venv
+services/ears/.venv/bin/pip install -r services/ears/requirements.txt
+./deploy/install.sh ponkihouse-voice ponkihouse-ears
+sudo systemctl enable --now ponkihouse-voice ponkihouse-ears
+```
+
+On the Pi, the speaker and mic run as fixtures
+(`ponkihouse-speaker`, `ponkihouse-bt-speaker`, `ponkihouse-mic`). The
+speaker feeds a `pcm.house` in `~/.asoundrc` (not in git): a `plug` to
+bluealsa at **48 kHz stereo** — a mono stream makes bluealsa renegotiate a
+distorted low-bitrate mono link. The Bluetooth radio may need
+`rfkill unblock bluetooth` once. `bt_keepalive.sh` keeps the JBL bonded
+(a pairing agent must be registered when pairing, or no bond is stored),
+connected and at volume on both channels.
+
 ## The camera and the finding service
 
 A Tapo-style ONVIF camera becomes a robot that looks, turns, and finds

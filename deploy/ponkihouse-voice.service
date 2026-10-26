@@ -1,0 +1,15 @@
+[Unit]
+Description=Ponkihouse voice — Kokoro and Piper speech for the house
+After=network.target
+
+[Service]
+Type=simple
+User=@PONKI_USER@
+WorkingDirectory=@PONKI_DIR@/services/voice
+ExecStart=@PONKI_DIR@/services/voice/.venv/bin/uvicorn voice_server:app --host 127.0.0.1 --port 8202
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=@PONKI_DIR@/.env
+
+[Install]
+WantedBy=multi-user.target
