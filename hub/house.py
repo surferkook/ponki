@@ -474,6 +474,12 @@ class House:
 
     async def _run_turn(self, rid: str, text: str, source: str, chain: tuple = (),
                         depth: int = 0, promised: bool = False) -> str:
+        if source == "human":
+            # a person talking to a busy robot interrupts its current turn;
+            # this message then runs as its own turn right after
+            soul = self.souls.get(rid)
+            if soul is not None:
+                soul.request_interrupt()
         try:
             return await self.soul(rid).turn(text, source=source, chain=chain,
                                              depth=depth, promised=promised)

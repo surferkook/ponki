@@ -443,5 +443,54 @@ class AskRouting(unittest.TestCase):
                 soul_mod.ASK_WAIT = old
 
 
+class GuidanceFreshness(unittest.TestCase):
+    def test_move_ask_needs_a_fresh_photo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            house = make_house(tmp, ScriptedProvider())
+            no_speak(house)
+
+            async def run():
+                eye = house.soul("eye")
+                call = ToolCall("1", "ask_robot",
+                                {"robot": "buddy", "message": "turn left 20 degrees"})
+                res = await eye._exec_tool(call, "human", ())
+                self.assertTrue(res.is_error)
+                self.assertIn("fresh look first", res.text)
+                eye._view_fresh = True
+                res = await eye._exec_tool(call, "human", ())
+                self.assertFalse(res.is_error)
+                self.assertFalse(eye._view_fresh)  # it moved: photo is old
+
+            asyncio.run(run())
+
+
+class InterruptTurn(unittest.TestCase):
+    def test_person_talking_interrupts_the_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = ScriptedProvider()
+            house = make_house(tmp, provider)
+
+            async def slow_speak(rid, text):
+                await asyncio.sleep(0.2)
+            house.speak = slow_speak
+
+            def endless(rid):
+                return [Step(tool_calls=[ToolCall("1", "say", {"text": "working"})])
+                        for _ in range(5)]
+
+            async def run():
+                buddy = house.soul("buddy")
+                provider.scripts["buddy"] = endless("buddy")
+                task = asyncio.ensure_future(buddy.turn("keep working", source="human"))
+                await asyncio.sleep(0.05)
+                buddy.request_interrupt()
+                await asyncio.wait_for(task, timeout=5)
+                self.assertGreaterEqual(len(provider.scripts["buddy"]), 3)
+                self.assertIn("stopped",
+                              house.soul("buddy").data["journal"][-1]["out"])
+
+            asyncio.run(run())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -109,6 +109,14 @@ class Soul:
         self._heard: list[dict] = []
         self._mid_lines: list[str] = []
         self.busy_since: float | None = None
+        self._interrupt = False
+        self._view_fresh = False   # a fresh photo since the last move-ish ask
+
+    def request_interrupt(self) -> None:
+        """A person is talking to this robot mid-turn: end the turn at the
+        next step boundary (their message then gets its own turn)."""
+        if self.lock.locked():
+            self._interrupt = True
 
     # -- persistence ---------------------------------------------------------
     def save(self) -> None:
@@ -376,7 +384,13 @@ class Soul:
                        "taken: after anything moved (a rover you're guiding), look again before "
                        "you give the next direction, and mind which way a robot faces (its "
                        "front, not its back). You can name several things at once, comma-"
-                       "separated, and get their positions in the same fresh photo.",
+                       "separated, and get their positions in the same fresh photo. Guiding "
+                       "rules: never send a move when either the goal or the robot is missing "
+                       "from your latest locate — find them again first. You cannot tell which "
+                       "way a robot faces from one still photo; if you're not sure, ask for a "
+                       "tiny 5 cm test drive forward, then locate again: the way it moved in "
+                       "the picture is the way it faces. One short move per ask (at most ~20 cm "
+                       "or ~45°), then locate again before the next one.",
                        {"what": {"type": "string",
                                   "description": "A short English noun phrase for what it looks "
                                                  "like, e.g. 'plant', 'red bag', 'yellow flag', "
@@ -486,6 +500,19 @@ class Soul:
         from . import imaging
 
         name, args = call.name, call.args or {}
+        #-guiding freshness: a move-ish ask needs a fresh photo since the
+        # last one — old photos after a move mean wrong directions
+        _MOVE_WORDS = ("drive", "turn", "rotate", "move", "forward", "back",
+                       "left", "right", "go ", "roll")
+        if name == "ask_robot":
+            msg = str(args.get("message", "")).lower()
+            if any(w in msg for w in _MOVE_WORDS) and not self._view_fresh:
+                return ToolResult(
+                    call.id,
+                    "Not yet: take a fresh look first — use locate (naming both "
+                    "what you're guiding and where it's going) or look, and only "
+                    "then give the next move. Guiding from an older photo sends "
+                    "them the wrong way.", is_error=True)
         try:
             if name == "say":
                 line = speakable(str(args.get("text", "")))
@@ -502,6 +529,9 @@ class Soul:
                 robot = str(args.get("robot", ""))
                 answer = await self.house.ask(self.id, robot,
                                               str(args.get("message", "")), chain + (self.id,))
+                msg = str(args.get("message", "")).lower()
+                if any(w in msg for w in _MOVE_WORDS):
+                    self._view_fresh = False   # it moved: the photo is old now
                 return ToolResult(call.id, f"{robot} replied (out loud — everyone in the "
                                            f"room heard it): {answer}")
             if name == "locate":
@@ -523,6 +553,8 @@ class Soul:
         if result.get("usd"):
             usage = self.data.setdefault("usage", {})
             usage["usd"] = (usage.get("usd") or 0.0) + float(result["usd"])
+        if name in ("locate", "look", "turn", "look_home") or result.get("image"):
+            self._view_fresh = True        # a photo taken just now
         image = result.get("image")
         return ToolResult(call.id, str(result.get("text", "done")),
                           image_b64=imaging.for_model(image) if image else None,
@@ -589,6 +621,7 @@ class Soul:
                 self.lock.release()
 
     async def _turn_locked(self, text, source, speaker, is_robot, chain, depth, promised):
+        self._view_fresh = False   # photos from earlier turns are old news
         house = self.house
         manifest = house.manifest(self.id)
         started = time.time()
@@ -648,7 +681,15 @@ class Soul:
                 conv.add_note(view)
                 self.data["told"] = view
 
+            stopped = False
             for step_no in range(1, MAX_STEPS + 1):
+                if self._interrupt:
+                    self._interrupt = False
+                    stopped = True
+                    reply = ""
+                    house.emit("thought", self.id,
+                               text="(stopped — a person is talking to me)")
+                    break
                 step = await conv.step()
                 steps += 1
                 usage = self.data.setdefault("usage", {})
@@ -685,6 +726,8 @@ class Soul:
 
         spoken = speakable(reply)
         out_lines = list(self._mid_lines)
+        if stopped:
+            out_lines.append("(stopped, as a person asked)")
         if spoken and not _is_silence(reply):
             out_lines.append(spoken)
         journal = self.data.setdefault("journal", [])

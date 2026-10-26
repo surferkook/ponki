@@ -87,6 +87,10 @@ def _opencv_capture(url: str):
     import cv2
 
     cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # newest frame only: no backlog
+    except Exception:
+        pass
     return cap
 
 
@@ -149,13 +153,13 @@ class Stream:
             if not ok or frame is None:
                 time.sleep(0.05)
                 continue
-            encoded = _encode_frame(frame)
-            if encoded is None:
-                continue
+            # keep the raw frame; encoding full-res JPEGs of every frame on
+            # the Pi is slower than the stream, so encoding here makes the
+            # "newest" frame fall seconds behind what it shows
             with self._lock:
                 if generation != self._generation:
                     return
-                self._frame = (encoded, time.time(), time.monotonic())
+                self._frame = (frame, time.time(), time.monotonic())
 
     def _open_locked(self) -> None:
         self._generation += 1
@@ -210,10 +214,12 @@ class Stream:
                 frame = self._frame
                 opened = self._opened_mono
             if frame is not None:
-                data, wall, mono = frame
+                raw, wall, mono = frame
                 if mono > max(fresh_after, request) and mono >= opened + 1.0:
-                    self.shot_at = wall
-                    return data
+                    data = _encode_frame(raw)  # encode only the frame handed out
+                    if data is not None:
+                        self.shot_at = wall
+                        return data
             now = time.monotonic()
             if now >= deadline:
                 if was_open and not reopened:
