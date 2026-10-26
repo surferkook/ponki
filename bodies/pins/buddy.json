@@ -1,0 +1,14 @@
+{
+  "name": "buddy",
+  "display_name": "Buddy",
+  "board": "uno",
+  "port": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_0123456789ABCDEF0123-if00",
+  "description": "A little Arduino desk buddy on a breadboard: an RGB mood light, a servo arm that can wave a paper flag and a piezo that chirps and plays little tunes, and a light sensor that notices when the room goes dark. It can't move around or see; it chirps, and the house speaker gives its words a voice.",
+  "voice": "beeper",
+  "parts": {
+    "mood": {"kind": "rgb_led", "pins": {"r": 3, "g": 6, "b": 5}, "about": "your mood light"},
+    "arm": {"kind": "servo", "pins": {"signal": 9}, "about": "your flag arm", "min": 30, "max": 150, "home": 90},
+    "beeper": {"kind": "piezo", "pins": {"signal": 8}, "about": "your piezo"},
+    "light": {"kind": "light_sensor", "pins": {"signal": "A0"}, "about": "your light sensor (a phototransistor): notices the room going dark"}
+  }
+}

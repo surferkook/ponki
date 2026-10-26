@@ -25,6 +25,22 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 Open http://localhost:8200/ — the tester robot appears on the board and its
 actions run from the Body tab.
 
+## Flashing an Arduino (the pins firmware)
+
+One generic sketch turns any Uno/Nano into a board the house configures at
+runtime; a robot is then a config file of parts, never a new sketch.
+Installed and pinned on the Pi workshop: **arduino:avr 1.8.8**,
+**Servo 1.3.0**, `arduino-cli` from the official Arduino release
+(checksum verified) at `~/bin/arduino-cli` (found via `$ARDUINO_CLI`,
+else `~/bin/arduino-cli`, else the PATH).
+
+```bash
+arduino-cli core update-index
+arduino-cli core install arduino:avr   # 1.8.8
+arduino-cli lib install Servo          # 1.3.0
+arduino-cli compile -b arduino:avr:uno -u -p <port> firmware/pins
+```
+
 Tests (standard library only, no hardware, no model calls):
 
 ```bash
