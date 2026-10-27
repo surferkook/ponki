@@ -135,7 +135,8 @@ class WhichWayItFaces(unittest.TestCase):
 
     def test_known_by_finder_words_it_faces_the_way_it_drove(self):
         self.house.soul("rover").set_looks("car")
-        self.assertEqual(self.house._facing_note("eye", spot(car=[(0.461, 0.173)], orange=[(0.6, 0.18)]), 100.0), "")
+        first = self.house._facing_note("eye", spot(car=[(0.461, 0.173)], orange=[(0.6, 0.18)]), 100.0)
+        self.assertIn("isn't known yet", first)      # never guess a facing from a still photo
         self.moved(150.0, ("turn", -90.0), ("drive", 25.0))      # the turn came before the drive
         note = self.house._facing_note("eye", spot(car=[(0.59, 0.202)], orange=[(0.6, 0.18)]), 200.0)
         self.assertIn("now faces to the right of your view", note)
@@ -167,6 +168,45 @@ class WhichWayItFaces(unittest.TestCase):
         note = self.house._facing_note("eye", spot(car=[(0.59, 0.20)], mug=[(0.13, 0.68)]), 300.0)
         self.assertIn("hasn't driven since", note)
         self.assertIn("its right is toward you", note)
+
+    def test_it_says_the_turn_toward_the_goal(self):
+        """Live: facing away-right at the far end, the mug almost straight behind; Keiki guessed 150° left
+        (needed ~170°) and the 20° miss took him over the edge."""
+        self.house.soul("rover").set_looks("car")
+        self.house._facing_note("eye", spot(car=[(0.40, 0.17)]), 100.0)
+        self.moved(150.0, ("drive", 30.0))
+        self.house._facing_note("eye", spot(car=[(0.484, 0.07)]), 200.0)
+        note = self.house._facing_note("eye", spot(car=[(0.484, 0.206)], mug=[(0.138, 0.593)]), 300.0)
+        turn = int(note.split("would turn about ")[1].split("°")[0])
+        self.assertIn("° to its left", note)
+        self.assertTrue(160 <= turn <= 180, note)
+
+    def test_a_camera_that_turns_its_head_forgets_where_things_were(self):
+        self.house.soul("rover").set_looks("car")
+        self.house._facing_note("eye", spot(car=[(0.44, 0.81)]), 100.0)
+        self.house._sightings["eye"]["robots"]["rover"]["at"] = None   # what act() does on a head turn
+        self.moved(150.0, ("drive", 40.0))
+        note = self.house._facing_note("eye", spot(car=[(0.10, 0.20)]), 200.0)
+        self.assertNotIn("drove from", note)
+        self.assertIn("isn't known yet", note)
+
+    def test_a_stop_forgets_every_facing(self):
+        """A stop usually means a hand caught the robot: live, the 'drive' after a catch was the hand."""
+        self.house.soul("rover").set_looks("car")
+        self.house._facing_note("eye", spot(car=[(0.44, 0.81)]), 100.0)
+        self.moved(150.0, ("drive", 40.0))
+        self.assertIn("now faces", self.house._facing_note("eye", spot(car=[(0.44, 0.60)]), 200.0))
+        asyncio.run(self.house.stop_everything())
+        self.assertIn("isn't known yet", self.house._facing_note("eye", spot(car=[(0.44, 0.60)]), 300.0))
+
+    def test_a_short_drive_gives_only_a_rough_facing(self):
+        """Live: a 10 cm probe at the far end, then 80 cm on its heading, into the Pi's cables."""
+        self.house.soul("rover").set_looks("car")
+        self.house._facing_note("eye", spot(car=[(0.608, 0.141)]), 100.0)
+        self.moved(150.0, ("drive", 10.0))
+        note = self.house._facing_note("eye", spot(car=[(0.566, 0.143)], orange=[(0.455, 0.829)]), 200.0)
+        self.assertIn("now faces to the left of your view", note)
+        self.assertIn("about 40 centimetres", note)
 
     def test_nothing_drove_nothing_said(self):
         self.house._facing_note("eye", spot(car=[(0.44, 0.81)]), 100.0)

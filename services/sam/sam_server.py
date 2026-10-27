@@ -26,7 +26,7 @@ from pathlib import Path
 import httpx
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 ENDPOINT = os.environ.get("HOUSE_SAM_ENDPOINT", "https://api.meta.ai/v1/responses")
 MODEL = os.environ.get("HOUSE_SAM_MODEL", "sam-3.1")
@@ -495,17 +495,29 @@ async def locate(payload: dict):
                         "x": cx * frame_w, "y": cy * frame_h, "radius": radius})
     overlay_img = Image.fromarray(overlay)
     draw = ImageDraw.Draw(overlay_img)
+    # readable on a phone: text scales with the photo; each label sits in a white pill
+    # just above its marker (below it when the marker is at the very top)
+    label_font = ImageFont.load_default(size=max(14, int(frame_w / 60)))
+    pad = max(4, int(frame_w / 400))
     for marker in markers:
         px, py, radius = marker["x"], marker["y"], marker["radius"]
         draw.ellipse([px - radius, py - radius, px + radius, py + radius],
                      fill=marker["colour"], outline=(0, 0, 0), width=2)
-        draw.text((px, py), str(marker["n"]), fill=(0, 0, 0), anchor="mm")
-        if len(concepts) > 1:
-            concept = marker["concept"]
-            short = concept if len(concept) <= 18 else concept[:18]
-            draw.text((px + radius + 4, py), f"{marker['n']} {short}",
-                      fill=(0, 0, 0), anchor="lm", stroke_width=2,
-                      stroke_fill=(255, 255, 255))
+        number_font = ImageFont.load_default(size=max(10, int(radius * 1.1)))
+        draw.text((px, py), str(marker["n"]), fill=(0, 0, 0), anchor="mm", font=number_font)
+        concept = marker["concept"]
+        short = concept if len(concept) <= 24 else concept[:24] + "…"
+        text = f"{marker['n']} {short}"
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=label_font, anchor="lt")
+        w, h = right - left + 2 * pad, bottom - top + 2 * pad
+        x = min(max(px - w / 2, 0), frame_w - w)
+        y = py - radius - 6 - h
+        if y < 0:
+            y = py + radius + 6
+        draw.rounded_rectangle([x, y, x + w, y + h], radius=h / 2,
+                               fill=(255, 255, 255), outline=marker["colour"], width=3)
+        draw.text((x + pad - left, y + pad - top), text, fill=(0, 0, 0),
+                  font=label_font, anchor="lt")
     return {"width": frame_w, "height": frame_h,
             "ms": int((time.time() - started) * 1000),
             "found": found, "overlay": _jpeg_b64(overlay_img, 90)}

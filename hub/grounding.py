@@ -164,6 +164,17 @@ def facing_words(vx: float, vy: float) -> str:
             f"is squeezed, so take angles as rough.)")
 
 
+def turn_to(facing: tuple[float, float], at: tuple[float, float],
+            goal: tuple[float, float]) -> float | None:
+    """The turn (+ = to its left) that points a robot at `facing` from `at` toward `goal`."""
+    import math
+    way = heading(at, goal)
+    if way is None:
+        return None
+    delta = math.degrees(math.atan2(-way[1], way[0]) - math.atan2(-facing[1], facing[0]))
+    return (delta + 180.0) % 360.0 - 180.0
+
+
 def turned_words(degrees: float) -> str:
     return f"it turned {abs(degrees):.0f}° to its {'left' if degrees > 0 else 'right'}"
 

@@ -61,7 +61,9 @@ FLOOR_PROMPT = (
     "attempt or a question — put that robot in also, whoever else reacts; never "
     "for its own lines. One step of a task still underway (a robot reporting a "
     "move it was asked to make while someone guides it) is not a finished task: "
-    "that moment comes when the whole task is said to be done. When open is false, react must be null; only promises "
+    "that moment comes when the whole task is said to be done. A robot reporting "
+    "it has done what a person asked (recorded it, found it, got there) is a "
+    "finished task, however it words it. When open is false, react must be null; only promises "
     "count. Reply with JSON only: "
     '{"react": "<robot id>" | null, "also": ["<robot id>", ...], "why": "<a few words>"}'
 )
@@ -511,6 +513,11 @@ class House:
         one robot that can fall off a table while a guide is still waiting on it."""
         for soul in self.souls.values():
             soul.request_interrupt("a person said stop")
+        for seen in self._sightings.values():
+            # a stop usually means a hand caught or moved a robot: what the cameras worked out
+            # about where things face no longer holds
+            seen["points"] = []
+            seen["robots"] = {}
         stoppable = [rid for rid, link in self.bodies.items()
                      if "stop" in (link.manifest.get("actions") or {})]
         if stoppable:
@@ -549,6 +556,13 @@ class House:
             if not is_voice and action != "stop":
                 await self._wait_turn(rid)
             self.emit("act", rid, action=action, args=args)
+            if action in ("turn", "look_home") and rid in self._sightings and \
+                    not isinstance(args.get("degrees"), (int, float)):
+                # a camera turning its head: what it saw sits elsewhere in its next photo
+                seen = self._sightings[rid]
+                seen["points"] = []
+                for rec in seen["robots"].values():
+                    rec["at"] = None
             if action in ("drive", "turn"):
                 amount = args.get("cm" if action == "drive" else "degrees")
                 if isinstance(amount, (int, float)) and amount:
@@ -694,7 +708,7 @@ class House:
         for rid, rec in list(seen["robots"].items()):
             since = moves_since(rid, rec["t"])
             name = self.label(rid)
-            if rid in spotted and any(kind == "drive" for kind, _ in since):
+            if rid in spotted and rec["at"] and any(kind == "drive" for kind, _ in since):
                 way = grounding.heading(rec["at"], spotted[rid])
                 if way is None:
                     continue
@@ -707,6 +721,11 @@ class House:
                     text += f", and after that drive {grounding.turned_words(turned)}"
                 rec["facing"] = way
                 notes.append(f"{text}: {grounding.facing_words(*way)}")
+                if since[last][1] < 30:
+                    # a few pixels of movement: the heading is a rough one
+                    notes.append(f"That facing comes from a short drive, so it can be 20° off: "
+                                 f"keep {name}'s next drive to about 40 centimetres and look "
+                                 f"again before the rest.")
             elif rec.get("facing") and not any(kind == "drive" for kind, _ in since):
                 turned = sum(a for kind, a in since if kind == "turn")
                 way = grounding._turned(*rec["facing"], turned) if abs(turned) >= 5 else rec["facing"]
@@ -718,8 +737,26 @@ class House:
                     rec["facing"] = way
             if rid in spotted:
                 rec.update(at=spotted[rid], t=now)
+                if rec.get("facing") and notes and notes[-1].startswith(name):
+                    for concept, items in found.items():
+                        goal = tuple(items[0]["center"]) if items else None
+                        if not goal or near(goal, spotted[rid]):
+                            continue
+                        turn = grounding.turn_to(rec["facing"], spotted[rid], goal)
+                        if turn is not None:
+                            notes.append(f"To face the {concept} (#{items[0]['n']}) from there, "
+                                         f"{name} would turn about {abs(turn):.0f}° to its "
+                                         f"{'left' if turn > 0 else 'right'}.")
         for rid, pt in spotted.items():                      # first sightings
             seen["robots"].setdefault(rid, {"at": pt, "t": now, "facing": None})
+            if not seen["robots"][rid].get("facing"):
+                name = self.label(rid)
+                notes.append(f"Which way {name} faces isn't known yet: it hasn't driven where "
+                             f"you could see since it was put there, and a guess from a still "
+                             f"photo is how robots go off tables. Before any turn, ask it to drive "
+                             f"about 10 centimetres straight ahead, no turn, then locate again: "
+                             f"you'll be told which way it faces and the turn to each thing you "
+                             f"named.")
         return "\n".join(notes)
 
     async def watch(self, rid: str, what: str, seconds=None) -> dict:

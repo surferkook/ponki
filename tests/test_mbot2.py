@@ -301,14 +301,16 @@ class RoverLinkTests(unittest.TestCase):
 
 
 class FakeLink:
-    def __init__(self, headings):
+    def __init__(self, headings, distance=None):
         self.calls: list = []
         self.headings = iter(headings)
+        self.distance = distance
 
     async def call(self, do, timeout=None, **args):
         self.calls.append((do, args))
         if do == "sense":
-            return {"heading": next(self.headings), "battery": 90}
+            return {"heading": next(self.headings, None), "battery": 90,
+                    "distance_cm": self.distance}
         if do == "drive":
             return {"done": "drive", "amount": args["cm"]}
         return {"done": do}
@@ -340,6 +342,21 @@ class BodyLogic(unittest.TestCase):
             self.assertIn("backing up is blind", result)
             result = asyncio.run(rover.drive(20))
             self.assertEqual(result, "drove 20 cm")
+
+    def test_drive_stops_short_of_what_its_eyes_see(self) -> None:
+        """Live: it read 19 cm ahead, was asked for 40 cm, and pushed the orange across the table."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rover = self._rover(tmp, [])
+            rover.link.distance = 30.0
+            result = asyncio.run(rover.drive(80))
+            self.assertEqual([a for d, a in rover.link.calls if d == "drive"][0]["cm"], 22)
+            self.assertEqual(result, "drove 22 cm and stopped: something is 30 cm in front "
+                                     "of me (asked for 80 cm)")
+            rover.link.distance = 9.0
+            result = asyncio.run(rover.drive(20))
+            self.assertTrue(result.startswith("didn't move: something is 9 cm in front"), result)
+            rover.link.distance = 150.0
+            self.assertEqual(asyncio.run(rover.drive(40)), "drove 40 cm")
 
     def test_turn_sign_and_gyro(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

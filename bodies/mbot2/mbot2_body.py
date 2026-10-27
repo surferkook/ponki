@@ -20,6 +20,7 @@ from rover_link import (  # noqa: E402
     MOVE_TIMEOUT, TURN_SIGN, Offline, RoverLink, load_secret)
 
 BACK_MAX = 10
+FRONT_MARGIN = 8   # cm kept between its nose and whatever its distance sensor sees ahead
 OFFLINE_TEXT = "offline (switched off, or out of Wi-Fi)"
 MOODS = ["happy", "sad", "surprised", "sleepy", "love", "wink", "angry",
          "neutral"]
@@ -83,6 +84,18 @@ class RoverBody:
             sent = -BACK_MAX
             note = " (backing up is blind, so only 10 cm: turn around to go " \
                    "further back)"
+        elif cm > 0:
+            # its eyes look ahead before every forward move: it stops short of what's
+            # there instead of pushing it (a guide's centimetres are a guess from a photo)
+            ahead = await self._distance()
+            if ahead is not None and cm > ahead - FRONT_MARGIN:
+                room = max(0, round(ahead - FRONT_MARGIN))
+                if room < 3:
+                    return (f"didn't move: something is {ahead:.0f} cm in front of me "
+                            f"(asked for {cm:g} cm)")
+                sent = room
+                note = (f" and stopped: something is {ahead:.0f} cm in front of me "
+                        f"(asked for {cm:g} cm)")
         ret = await self.link.call("drive", cm=sent, speed=speed,
                                    timeout=MOVE_TIMEOUT)
         amount = sent
@@ -101,6 +114,15 @@ class RoverBody:
             result += f" (the gyro measured {signed_degrees(turned)})"
         return result
 
+    async def _distance(self):
+        try:
+            ret = await self.link.call("sense", timeout=5)
+            if isinstance(ret, dict) and ret.get("distance_cm") is not None:
+                return float(ret["distance_cm"])
+        except Exception:
+            pass
+        return None  # nothing seen (or no reading): the drive goes as asked
+
     async def _heading(self):
         try:
             ret = await self.link.call("sense", timeout=5)
@@ -115,7 +137,9 @@ class RoverBody:
         body = self.body
 
         @body.action("drive", "Drive straight: + forward, − backward, in cm "
-                              "(forward up to 100 per move). Backing up is "
+                              "(forward up to 100 per move; it stops short "
+                              "of anything its distance sensor sees ahead, "
+                              "and says so). Backing up is "
                               "BLIND (nothing sees behind you): at most 10 cm "
                               "per move. To go back further, turn around "
                               "first and drive forward. Answers when it has "
