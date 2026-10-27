@@ -35,6 +35,23 @@ hardware, and it comes back as itself.
 - **Robots move on, they aren't deleted.** A retired robot's soul, memories and photos are kept, its housemates
   are told, and it can come home again.
 
+## Screenshots
+
+Click a picture to see it full size.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="docs/media/house.png"><img src="docs/media/house.png" alt="The house: every robot, the live feed and hold-to-talk"></a><br><sub><b>The house</b>: every robot and the live feed</sub></td>
+    <td align="center" width="33%"><a href="docs/media/locate.png"><img src="docs/media/locate.png" alt="Keiki's search: SAM 3.1 marks and what the house worked out"></a><br><sub><b>Keiki finds things</b> with SAM 3.1</sub></td>
+    <td align="center" width="33%"><a href="docs/media/guiding.png"><img src="docs/media/guiding.png" alt="Keiki guiding Vroom-Vroom to the orange"></a><br><sub><b>Guiding</b> Vroom-Vroom to the orange</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="docs/media/soul.png"><img src="docs/media/soul.png" alt="A robot's soul: persona, memories, promises and voice"></a><br><sub><b>A robot's soul</b>: persona, memories, promises</sub></td>
+    <td align="center" width="33%"><a href="docs/media/builder.png"><img src="docs/media/builder.png" alt="Add a robot: the builder's five steps"></a><br><sub><b>Add a robot</b> with the builder</sub></td>
+    <td align="center" width="33%"><a href="docs/media/system.png"><img src="docs/media/system.png" alt="System: services, workshops and equipment"></a><br><sub><b>System</b>: services, workshops, equipment</sub></td>
+  </tr>
+</table>
+
 ## Meta's models, one per job
 
 | Job | Model | Code |
