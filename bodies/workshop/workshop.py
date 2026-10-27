@@ -880,7 +880,6 @@ def main() -> None:
 
     logging.basicConfig(format="%(asctime)s %(name)s %(message)s",
                         level=logging.INFO)
-    threading.Thread(target=supervise, daemon=True).start()
     body = build_body()
     body.run(body._workshop_state_loop())
 
