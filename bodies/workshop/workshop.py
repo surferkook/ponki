@@ -170,6 +170,10 @@ def taken_devices() -> dict:
         device_id = record.get("device_id")
         if device_id:
             taken[str(device_id)] = name
+    # the house mic runs as its own unit on this machine, not as one of our robots
+    source = os.environ.get("MIC_SOURCE", "")
+    if source.startswith("alsa:"):
+        taken.setdefault(f"mic:{source[len('alsa:'):]}", "the house mic")
     return taken
 
 

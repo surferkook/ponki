@@ -575,6 +575,7 @@ class Builder:
             "id": build.id,
             "created": build.created,
             "workshop": build.workshop,
+            "name": build.data.get("name") or None,
             "family": build.family_ref or None,
             "family_title": self.family_title(build) or None,
             "connect": copy.deepcopy(getattr(fam, "CONNECT", {}) or {})
