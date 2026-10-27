@@ -22,6 +22,8 @@ import parts as parts_lib  # noqa: E402
 
 NAME = "pins"
 TITLE = "Arduino board"
+SCAN = "USB boards"
+FIXTURE = None
 FIRMWARE = "house-pins"
 SUPPORTED_FQBN = {"arduino:avr:uno": "uno", "arduino:avr:nano": "nano"}
 CONNECT = {"label": "Install the pins firmware",
@@ -48,7 +50,8 @@ PLAN_PARAMS = {
 EXAMPLE = {
     "device": {"id": "sim", "name": "Simulated Uno", "fqbn": "arduino:avr:uno",
                "board": "uno", "firmware": "house-pins 2", "ready": True},
-    "plan": {"parts": [{"id": "lamp", "kind": "led", "about": "your little lamp"}]},
+    "plan": {"name": "blinky",
+             "parts": [{"id": "lamp", "kind": "led", "about": "your little lamp"}]},
 }
 
 GUIDE = """An Uno/Nano from a starter kit; the person may never have built anything.
@@ -165,16 +168,26 @@ def discover(taken=None) -> list[dict]:
     sims = int(os.environ.get("HOUSE_SIMULATED_BOARDS", "0") or 0)
     for i in range(sims):
         suffix = "" if i == 0 else str(i + 1)
-        boards.append({"id": f"sim{suffix}", "name": "Simulated Uno",
-                       "fqbn": "arduino:avr:uno", "board": "uno",
-                       "firmware": "house-pins 2", "ready": True, "where": "sim"})
+        device = {"id": f"sim{suffix}", "name": "Simulated Uno",
+                  "fqbn": "arduino:avr:uno", "board": "uno",
+                  "firmware": "house-pins 2", "ready": True, "where": "sim",
+                  "status": "ready"}
+        # taken maps device id -> robot (a set/list of ids also works).
+        owner = None
+        if isinstance(taken, dict):
+            owner = taken.get(device["id"])
+        elif device["id"] in taken or os.path.realpath(device["id"]) in taken_real:
+            owner = "a robot"
+        if owner:
+            device.update(ready=False, robot=owner, status="in use")
+        boards.append(device)
     return boards
 
 
-def connect(device: dict, fields: dict) -> dict:
+def connect(device: dict, fields: dict):
     if str(device.get("id", "")).startswith("sim"):
         time.sleep(2)
-        return {"ready": True, "text": "the simulated board is ready"}
+        return ("the simulated board is ready", {**device, "ready": True})
     fqbn = device.get("fqbn") or ""
     if fqbn not in SUPPORTED_FQBN:
         raise ValueError(f"a {device.get('name', 'board')} isn't supported yet "
@@ -196,7 +209,8 @@ def connect(device: dict, fields: dict) -> dict:
     if firmware != "house-pins 2":
         raise ValueError(f"flashed, but the board doesn't answer as house-pins "
                          f"(it says: {firmware})")
-    return {"ready": True, "text": "flashed house-pins; the board answers as house-pins 2"}
+    return ("flashed house-pins; the board answers as house-pins 2",
+            {**device, "ready": True, "firmware": firmware})
 
 
 def setup(config: dict, device: dict) -> dict:
@@ -205,7 +219,7 @@ def setup(config: dict, device: dict) -> dict:
     return config
 
 
-def plan(config: dict, args: dict) -> list[str]:
+def plan(config: dict, args: dict) -> str:
     listed = (args or {}).get("parts") or []
     seen: set[str] = set()
     new_parts: dict = {}
@@ -235,28 +249,27 @@ def plan(config: dict, args: dict) -> list[str]:
                 for role, raw in (part.get("pins") or {}).items()}
         lines.append(f"{pid} ({part.get('kind')}, pins {pins}): "
                      + " · ".join(wires.get(pid) or []))
-    return lines
+    return "\n".join(lines)
 
 
-def checks(config: dict, device: dict) -> list[dict]:
+def checks(config: dict, device: dict) -> dict:
     wires = parts_lib.wiring(config)
-    out = []
+    out: dict = {}
     for pid, part in (config.get("parts") or {}).items():
         sig = json.dumps([part.get("kind"), part.get("pins") or {}], sort_keys=True)
-        out.append({"title": pid, "kind": part.get("kind"),
-                    "steps": wires.get(pid) or [], "sig": sig, "id": pid})
+        out[pid] = {"title": pid, "steps": wires.get(pid) or [], "sig": sig}
     return out
 
 
-def problems(config: dict) -> list[str]:
+def problems(config: dict):
     if not config.get("parts"):
-        return []
-    return parts_lib.validate(config)[0]
+        return ([], [])
+    return parts_lib.validate(config)
 
 
-def body(config: dict, device: dict) -> str:
+def body(config: dict, device: dict) -> dict:
     board = parts_lib.BOARDS[config.get("board") or "uno"]
-    rows = ["Part | What it is | Pins"]
+    rows = []
     for pid, part in (config.get("parts") or {}).items():
         pins = part.get("pins") or {}
         if len(pins) > 1:
@@ -266,14 +279,14 @@ def body(config: dict, device: dict) -> str:
             shown = board.label(board.pin(next(iter(pins.values()))))
         else:
             shown = ""
-        rows.append(f"{pid} | {part.get('kind')} · {part.get('about', '')} | {shown}")
-    return "\n".join(rows)
+        rows.append([pid, f"{part.get('kind')} · {part.get('about', '')}", shown])
+    return {"head": ["Part", "What it is", "Pins"], "rows": rows}
 
 
-async def check(device: dict, config: dict, part_id: str) -> dict:
-    part_config = (config.get("parts") or {})[part_id]
+async def check(device: dict, config: dict, check_id: str) -> dict:
+    part_config = (config.get("parts") or {})[check_id]
     mini = {"name": config.get("name") or "check", "board": config.get("board", "uno"),
-            "parts": {part_id: part_config}}
+            "parts": {check_id: part_config}}
     found, _warnings = parts_lib.validate(mini)
     if found:
         raise ValueError("; ".join(found))
@@ -284,7 +297,7 @@ async def check(device: dict, config: dict, part_id: str) -> dict:
     try:
         if isinstance(pins, SerialLink) and not pins.wait_hello(4.0):
             pins.info()
-        part = build_part(part_id, part_config,
+        part = build_part(check_id, part_config,
                           parts_lib.BOARDS[mini["board"]], pins,
                           lambda text: asyncio.sleep(0))
         part.setup()

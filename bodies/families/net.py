@@ -13,7 +13,7 @@ import subprocess
 import time
 
 CACHE_SECONDS = 20.0
-_cache: dict = {"at": 0.0, "ports": set(), "open": {}}
+_cache: dict = {"at": 0.0, "key": None, "open": {}}
 
 
 def own_subnets() -> list[ipaddress.IPv4Network]:
@@ -44,38 +44,73 @@ def own_subnets() -> list[ipaddress.IPv4Network]:
     return nets
 
 
-def sweep(ports: set[int], timeout: float = 0.6) -> dict[str, set[int]]:
-    """{host: {open ports}} across our /24s. Cached; forget() clears."""
-    now = time.monotonic()
-    if _cache["open"] and _cache["ports"] == set(ports) \
-            and now - _cache["at"] < CACHE_SECONDS:
-        return dict(_cache["open"])
-    targets: list[tuple[str, int]] = []
+def own_addresses() -> list[str]:
+    """This machine's own private IPv4 addresses (strings)."""
+    addresses: list[str] = []
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return addresses
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        iface = parts[1].rstrip(":")
+        if iface == "lo" or iface.startswith(("docker", "br-", "veth", "tailscale")):
+            continue
+        try:
+            iface_addr = ipaddress.IPv4Interface(parts[3])
+        except ValueError:
+            continue
+        if not iface_addr.ip.is_private:
+            continue
+        text = str(iface_addr.ip)
+        if text not in addresses:
+            addresses.append(text)
+    return addresses
+
+
+def hosts() -> list[str]:
+    """Every host address in this machine's private /24s."""
+    out: list[str] = []
     for net in own_subnets():
         for host in net.hosts():
-            for port in sorted(ports):
-                targets.append((str(host), port))
+            out.append(str(host))
+    return out
+
+
+def sweep(ports, targets=None) -> dict[str, set[int]]:
+    """{host: {open ports}}; targets defaults to hosts(). Cached 20 s."""
+    port_set = {int(p) for p in ports}
+    target_list = hosts() if targets is None else [str(t) for t in targets]
+    key = (frozenset(port_set), tuple(target_list))
+    now = time.monotonic()
+    if _cache["key"] == key and now - _cache["at"] < CACHE_SECONDS:
+        return {h: set(ps) for h, ps in _cache["open"].items()}
+    probes: list[tuple[str, int]] = [
+        (host, port) for host in target_list for port in sorted(port_set)]
 
     def probe(target: tuple[str, int]) -> tuple[str, int, bool]:
         host, port = target
         try:
-            with socket.create_connection((host, port), timeout=timeout):
+            with socket.create_connection((host, port), timeout=0.6):
                 return host, port, True
         except OSError:
             return host, port, False
 
     found: dict[str, set[int]] = {}
-    if targets:
+    if probes:
         with concurrent.futures.ThreadPoolExecutor(max_workers=512) as pool:
-            for host, port, is_open in pool.map(probe, targets):
+            for host, port, is_open in pool.map(probe, probes):
                 if is_open:
                     found.setdefault(host, set()).add(port)
-    _cache.update(at=now, ports=set(ports), open=found)
-    return dict(found)
+    _cache.update(at=now, key=key, open=found)
+    return {h: set(ps) for h, ps in found.items()}
 
 
 def forget() -> None:
-    _cache.update(at=0.0, ports=set(), open={})
+    _cache.update(at=0.0, key=None, open={})
 
 
 def name(host: str) -> str:

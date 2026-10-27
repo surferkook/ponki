@@ -27,6 +27,8 @@ from rover_link import (  # noqa: E402
 
 NAME = "mbot2"
 TITLE = "mBot2 rover"
+SCAN = "mBot2 rovers on USB"
+FIXTURE = None
 CLAIMS_PORTS = True
 PLAN_PARAMS = {}
 CONNECT = {
@@ -247,7 +249,7 @@ def _listen(board: CyberPi, said: list[str], stop: threading.Event) -> None:
         time.sleep(0.2)
 
 
-def connect(device: dict, fields: dict, config_path=None) -> dict:
+def connect(device: dict, fields: dict, config_path=None):
     ssid = (fields.get("ssid") or "").strip()
     password = fields.get("password") or ""
     if not ssid or not password:
@@ -290,13 +292,12 @@ def connect(device: dict, fields: dict, config_path=None) -> dict:
                "battery": hello.get("battery"), "ready": True,
                "status": f"on the Wi-Fi ({hello.get('from')}) · battery "
                          f"{hello.get('battery')}%"}
-    return {"ready": True, "device": updated,
-            "text": f"the rover's program is on, and it called in over Wi-Fi "
-                    f"from {hello.get('from')} after {hello.get('after')} s. "
-                    f"The USB cable can come out now."}
+    return (f"the rover's program is on, and it called in over Wi-Fi "
+            f"from {hello.get('from')} after {hello.get('after')} s. "
+            f"The USB cable can come out now.", updated)
 
 
-def update(device: dict, config_path=None) -> dict:
+def update(device: dict, config_path=None):
     secret = load_secret(device.get("id", ""),
                          Path(config_path) if config_path else None)
     if not secret.get("ssid") or not secret.get("key"):
@@ -336,9 +337,8 @@ def update(device: dict, config_path=None) -> dict:
     finally:
         board.close()
     updated = {**device, "program": f"house-rover {version()}", "host": host}
-    return {"ready": True, "device": updated,
-            "text": f"the rover runs house-rover {version()} now and is back "
-                    f"with the house; the USB cable can come out"}
+    return (f"the rover runs house-rover {version()} now and is back "
+            f"with the house; the USB cable can come out", updated)
 
 
 def setup(config: dict, device: dict) -> dict:
@@ -349,53 +349,43 @@ def plan(config: dict, args: dict) -> str:
     return ""
 
 
-def checks(config: dict, device: dict) -> list[dict]:
+def checks(config: dict, device: dict) -> dict:
     room = "Give it room: 30 cm free in front of it, away from any table " \
            "edge — or hold it up with its wheels in the air."
-    return [
-        {"title": "screen", "kind": "screen", "sig": "screen", "id": "screen",
-         "steps": ["Watch its screen."],
-         "expect": "a happy face (^_^) on its screen, its lights green for a "
-                   "moment, and a beep"},
-        {"title": "sensors", "kind": "sensors", "sig": "sensors", "id": "sensors",
-         "steps": ["It reads its battery, gyro and distance sensor."],
-         "expect": "the readings make sense (put a hand in front of it and "
-                   "run it again: the distance drops)"},
-        {"title": "drive", "kind": "drive", "sig": "drive", "id": "drive",
-         "steps": [room],
-         "expect": "it drives 10 cm forward, then back to where it was"},
-        {"title": "turn", "kind": "turn", "sig": "turn", "id": "turn",
-         "steps": [room],
-         "expect": "it turns a quarter to ITS left (counter-clockwise seen "
-                   "from above), then back"},
-        {"title": "eyes", "kind": "eyes", "sig": "eyes", "id": "eyes",
-         "steps": ["Watch the two eyes at its front."],
-         "expect": "the two eyes at its front light up blue, then wink, "
-                   "then go dark"},
-    ]
+    return {
+        "screen": {"title": "screen", "steps": ["Watch its screen."],
+                   "sig": "screen"},
+        "sensors": {"title": "sensors",
+                    "steps": ["It reads its battery, gyro and distance sensor."],
+                    "sig": "sensors"},
+        "drive": {"title": "drive", "steps": [room], "sig": "drive"},
+        "turn": {"title": "turn", "steps": [room], "sig": "turn"},
+        "eyes": {"title": "eyes",
+                 "steps": ["Watch the two eyes at its front."],
+                 "sig": "eyes"},
+    }
 
 
-def problems(config: dict) -> list[str]:
+def problems(config: dict):
     device = config.get("device") or {}
     if not device.get("rover_port"):
-        return ["it isn't on the Wi-Fi yet (Connect)"]
-    return []
+        return (["it isn't on the Wi-Fi yet (Connect)"], [])
+    return ([], [])
 
 
-def body(config: dict, device: dict) -> str:
+def body(config: dict, device: dict) -> dict:
     link = (f"Wi-Fi → its workshop ({device.get('host')}:{device.get('rover_port')})"
             if device.get("rover_port") else "USB only so far (Connect puts "
-                                            "it on the Wi-Fi)")
-    return "\n".join([
-        "Part | What it is | Pins",
-        "wheels | two encoder motors: exact centimetres and degrees | ",
-        "screen | a colour screen that shows faces and words | ",
-        "lights | five LEDs | ",
-        "speaker | beeps and tones | ",
-        "eyes | the ultrasonic distance sensor's blue LEDs | ",
-        "sensors | battery, gyro heading, distance in front | ",
-        f"link | {link} | ",
-    ])
+                                           "it on the Wi-Fi)")
+    return {"head": ["Part", "What it is", "Pins"], "rows": [
+        ["wheels", "two encoder motors: exact centimetres and degrees", ""],
+        ["screen", "a colour screen that shows faces and words", ""],
+        ["lights", "five LEDs", ""],
+        ["speaker", "beeps and tones", ""],
+        ["eyes", "the ultrasonic distance sensor's blue LEDs", ""],
+        ["sensors", "battery, gyro heading, distance in front", ""],
+        ["link", link, ""],
+    ]}
 
 
 async def check(device: dict, config: dict, check_id: str,

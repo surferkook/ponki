@@ -64,8 +64,11 @@ def get_provider(role: str = "") -> Provider:
     from .meta import MetaProvider
 
     if role == "builder":
-        return MetaProvider(os.environ.get("HOUSE_BUILDER_MODEL", "muse-wonder-1.0"),
-                            os.environ.get("HOUSE_BUILDER_EFFORT", "medium"))
+        return MetaProvider(
+            os.environ.get("HOUSE_BUILDER_MODEL")
+            or os.environ.get("HOUSE_MODEL", "muse-spark-1.3"),
+            os.environ.get("HOUSE_BUILDER_EFFORT")
+            or os.environ.get("HOUSE_EFFORT", "low"))
     return MetaProvider(os.environ.get("HOUSE_MODEL", "muse-spark-1.3"),
                         os.environ.get("HOUSE_EFFORT", "low"))
 

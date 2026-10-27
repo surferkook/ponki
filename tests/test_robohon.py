@@ -186,10 +186,11 @@ class Family(unittest.TestCase):
     def test_example_and_checks(self) -> None:
         device = family.EXAMPLE["device"]
         self.assertEqual(device["gestures"], 56)
-        kinds = [c["id"] for c in family.checks({}, device)]
+        kinds = list(family.checks({}, device))
         self.assertEqual(kinds, ["voice", "gesture", "camera"])
-        self.assertEqual(family.problems({}), [])
-        self.assertIn("56 gestures", family.body({}, device))
+        self.assertEqual(family.problems({}), ([], []))
+        body = family.body({}, device)
+        self.assertTrue(any("56 gestures" in row[1] for row in body["rows"]))
         result = asyncio.run(family.check(device, {}, "camera"))
         self.assertIn("image", result)
 

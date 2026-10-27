@@ -23,6 +23,8 @@ from onvif_client import (  # noqa: E402
 
 NAME = "onvif"
 TITLE = "IP camera"
+SCAN = "cameras on the network"
+FIXTURE = None
 CONNECT = {
     "label": "Connect the camera",
     "hint": "It needs a Camera Account: Tapo app → the camera → ⚙️ → Advanced "
@@ -30,9 +32,9 @@ CONNECT = {
             "Third-Party Compatibility on). The account stays on this workshop, "
             "never in the hub. It is not your TP-Link cloud login.",
     "fields": [
-        {"name": "address", "label": "Address (IP)", "secret": False},
-        {"name": "username", "label": "Camera account username", "secret": False},
-        {"name": "password", "label": "Camera account password", "secret": True},
+        {"id": "address", "label": "Address (IP)", "secret": False},
+        {"id": "username", "label": "Camera account username", "secret": False},
+        {"id": "password", "label": "Camera account password", "secret": True},
     ],
 }
 CHECK_HINT = "Make sure the camera's privacy mode is off."
@@ -136,7 +138,7 @@ def discover(taken=None) -> list[dict]:
     return out
 
 
-def connect(device: dict, fields: dict, config_path=None) -> dict:
+def connect(device: dict, fields: dict, config_path=None):
     host = (fields.get("address") or device.get("host") or "").strip()
     username = (fields.get("username") or "").strip()
     password = fields.get("password") or ""
@@ -159,8 +161,7 @@ def connect(device: dict, fields: dict, config_path=None) -> dict:
         save_secret(Path(config_path), built["id"],
                     {"username": username, "password": password})
     kind = "it has a pan/tilt head" if camera.has_ptz else "fixed, no pan/tilt"
-    return {"ready": True, "device": built,
-            "text": f"logged in to the {name} ({kind})"}
+    return (f"logged in to the {name} ({kind})", built)
 
 
 def setup(config: dict, device: dict) -> dict:
@@ -169,48 +170,47 @@ def setup(config: dict, device: dict) -> dict:
     return config
 
 
-def plan(config: dict, args: dict) -> list[str]:
-    return []  # a camera's body is its device; nothing to plan
+def plan(config: dict, args: dict) -> str:
+    return ""  # a camera's body is its device; nothing to plan
 
 
-def checks(config: dict, device: dict) -> list[dict]:
-    out = [{"title": "camera", "kind": "camera", "sig": "camera", "id": "camera",
-            "steps": ["Make sure the camera's privacy mode is off."],
-            "expect": "the photo shows what the camera is facing"}]
+def checks(config: dict, device: dict) -> dict:
+    out = {"camera": {"title": "camera",
+                      "steps": ["Make sure the camera's privacy mode is off."],
+                      "sig": "camera"}}
     if device.get("ptz"):
-        out += [
-            {"title": "pan", "kind": "pan", "sig": "pan", "id": "pan",
-             "steps": ["Watch the camera: it will turn right about 45°, then back."],
-             "expect": "it turns right about 45°, then back"},
-            {"title": "tilt", "kind": "tilt", "sig": "tilt", "id": "tilt",
-             "steps": ["Watch the camera: it will tilt up about 20°, then back."],
-             "expect": "it tilts up about 20°, then back down"},
-            {"title": "home", "kind": "home", "sig": "home", "id": "home",
-             "steps": ["Aim the camera at what it should watch (in the Tapo app "
-                       "or by hand), then run this check."],
-             "expect": "the photo shows its home view — run it again if not"},
-        ]
+        out["pan"] = {"title": "pan",
+                      "steps": ["Watch the camera: it will turn right about 45°, then back."],
+                      "sig": "pan"}
+        out["tilt"] = {"title": "tilt",
+                       "steps": ["Watch the camera: it will tilt up about 20°, then back."],
+                       "sig": "tilt"}
+        out["home"] = {"title": "home",
+                       "steps": ["Aim the camera at what it should watch (in the Tapo app "
+                                 "or by hand), then run this check."],
+                       "sig": "home"}
     return out
 
 
-def problems(config: dict) -> list[str]:
+def problems(config: dict):
     device = config.get("device") or {}
     if not device.get("host"):
-        return ["the camera has no address yet"]
-    return []
+        return (["the camera has no address yet"], [])
+    return ([], [])
 
 
-def body(config: dict, device: dict) -> str:
+def body(config: dict, device: dict) -> dict:
     name = device.get("name") or "camera"
     host = device.get("host") or ""
-    rows = ["Part | What it is | Pins", f"camera | {name} · {host} | "]
+    rows = [["camera", f"{name} · {host}", ""]]
     if device.get("ptz"):
-        rows.append(f"pan/tilt | turns about {int(device.get('pan_degrees') or 360)}° "
-                    f"and tilts about {int(device.get('tilt_degrees') or 90)}° | ")
-    rows.append("home view | "
-                + ("remembered" if device.get("home")
-                   else "not set yet (the last check)") + " | ")
-    return "\n".join(rows)
+        rows.append(["pan/tilt",
+                     f"turns about {int(device.get('pan_degrees') or 360)}° "
+                     f"and tilts about {int(device.get('tilt_degrees') or 90)}°", ""])
+    rows.append(["home view",
+                 "remembered" if device.get("home")
+                 else "not set yet (the last check)", ""])
+    return {"head": ["Part", "What it is", "Pins"], "rows": rows}
 
 
 async def run_check(device: dict, config: dict, check_id: str,
@@ -234,9 +234,8 @@ async def run_check(device: dict, config: dict, check_id: str,
         try:
             if check_id == "camera":
                 jpeg = stream.jpeg()
-                import base64
                 return {"expect": "the photo shows what the camera is facing",
-                        "image": base64.b64encode(jpeg).decode("ascii")}
+                        "image": jpeg}
             if check_id == "pan":
                 last_dir: dict = {}
                 ux, uy = move_units(45, 0, device, last_dir)
@@ -268,9 +267,8 @@ async def run_check(device: dict, config: dict, check_id: str,
                 if isinstance(config.get("device"), dict):
                     config["device"]["home"] = device["home"]
                 jpeg = stream.jpeg()
-                import base64
                 return {"expect": "the photo shows its home view — run it again if not",
-                        "image": base64.b64encode(jpeg).decode("ascii"),
+                        "image": jpeg,
                         "home": device["home"]}
             raise ValueError(f"unknown check '{check_id}'")
         finally:

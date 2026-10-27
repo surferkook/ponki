@@ -14,6 +14,8 @@ from pathlib import Path
 
 NAME = "robohon"
 TITLE = "RoBoHoN"
+SCAN = "RoBoHoN on the network"
+FIXTURE = None
 CONNECT = {"label": "", "hint": "", "fields": []}
 CHECK_HINT = "Take him out of the cradle if you want to see the full-body gestures."
 PLAN_PARAMS: dict = {}
@@ -89,14 +91,14 @@ def discover(taken=None) -> list[dict]:
     return [device]
 
 
-def connect(device: dict, fields: dict, config_path=None) -> dict:
+def connect(device: dict, fields: dict, config_path=None):
     found = discover()
     if not found:
         raise ValueError("his control server doesn't answer anymore")
     device = found[0]
     if not device["ready"]:
         raise ValueError(device["status"])
-    return {"ready": True, "device": device, "text": "he's online"}
+    return ("he's online", device)
 
 
 def setup(config: dict, device: dict) -> dict:
@@ -111,31 +113,26 @@ def plan(config: dict, args: dict) -> str:
     return ""
 
 
-def problems(config: dict) -> list[str]:
-    return []
+def problems(config: dict):
+    return ([], [])
 
 
-def body(config: dict, device: dict) -> str:
+def body(config: dict, device: dict) -> dict:
     n = device.get("gestures", 0)
-    return "\n".join([
-        "| Ability | Details |",
-        "|---|---|",
-        "| voice | his own speaker and his own voices |",
-        f"| gestures | {n} gestures: head, arms, legs, LED eyes |",
-        "| camera | in his forehead |",
-        "| pose | standing / sitting / docked in the cradle |",
-    ])
+    return {"head": ["Ability", "Details"], "rows": [
+        ["voice", "his own speaker and his own voices"],
+        ["gestures", f"{n} gestures: head, arms, legs, LED eyes"],
+        ["camera", "in his forehead"],
+        ["pose", "standing / sitting / docked in the cradle"],
+    ]}
 
 
-def checks(config: dict, device: dict) -> list[dict]:
-    return [
-        {"title": "voice", "kind": "voice", "sig": "1", "id": "voice",
-         "steps": [], "expect": 'he says "Hello! Can you hear me?" through his own speaker'},
-        {"title": "gesture", "kind": "gesture", "sig": "1", "id": "gesture",
-         "steps": [], "expect": "he waves (in the cradle: an upper-body wave)"},
-        {"title": "camera", "kind": "camera", "sig": "1", "id": "camera",
-         "steps": [], "expect": "the photo shows what's in front of him"},
-    ]
+def checks(config: dict, device: dict) -> dict:
+    return {
+        "voice": {"title": "voice", "steps": [], "sig": "1"},
+        "gesture": {"title": "gesture", "steps": [], "sig": "1"},
+        "camera": {"title": "camera", "steps": [], "sig": "1"},
+    }
 
 
 async def check(device: dict, config: dict, check_id: str, config_path=None) -> dict:
@@ -159,9 +156,8 @@ async def check(device: dict, config: dict, check_id: str, config_path=None) -> 
         if not json.loads(data or b"{}").get("ok"):
             raise ValueError("his camera didn't return a photo")
         _, photo = await asyncio.to_thread(_get, web, "/vision/latest.jpg", 10.0)
-        import base64
         return {"expect": "the photo shows what's in front of him",
-                "image": base64.b64encode(photo).decode()}
+                "image": photo}
     raise ValueError(f"unknown check '{check_id}'")
 
 

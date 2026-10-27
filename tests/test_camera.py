@@ -247,10 +247,11 @@ class FamilyShape(unittest.TestCase):
     def test_example_checks_body_command(self) -> None:
         import onvif as family
 
-        ids = [c["id"] for c in family.checks({}, family.EXAMPLE["device"])]
+        ids = list(family.checks({}, family.EXAMPLE["device"]))
         self.assertEqual(ids, ["camera", "pan", "tilt", "home"])
-        text = family.body({}, family.EXAMPLE["device"])
-        self.assertIn("home view | remembered", text)
+        body = family.body({}, family.EXAMPLE["device"])
+        self.assertTrue(any(row[0] == "home view" and row[1] == "remembered"
+                            for row in body["rows"]))
         cmd, env = family.command("/tmp/keiki.json", {})
         self.assertTrue(cmd[-1].endswith("onvif_body.py") or
                         cmd[-2].endswith("onvif_body.py"))

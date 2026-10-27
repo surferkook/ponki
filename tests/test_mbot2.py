@@ -390,12 +390,13 @@ class FamilyShape(unittest.TestCase):
     def test_example_checks_and_problems(self) -> None:
         import mbot2 as family
 
-        ids = [c["id"] for c in family.checks({}, family.EXAMPLE["device"])]
+        ids = list(family.checks({}, family.EXAMPLE["device"]))
         self.assertEqual(ids, ["screen", "sensors", "drive", "turn", "eyes"])
         self.assertEqual(family.problems({"device": family.EXAMPLE["device"]}),
-                         [])
-        self.assertIn("Wi-Fi → its workshop",
-                      family.body({}, family.EXAMPLE["device"]))
+                         ([], []))
+        body = family.body({}, family.EXAMPLE["device"])
+        self.assertTrue(any("Wi-Fi → its workshop" in row[1]
+                            for row in body["rows"]))
         cmd, env = family.command("/tmp/vroom.json", {})
         self.assertTrue(cmd[-2].endswith("mbot2_body.py"))
 

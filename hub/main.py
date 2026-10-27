@@ -32,6 +32,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 
 from . import apilog  # noqa: E402
+from .builder import Builder, family_catalog  # noqa: E402
 from .export import export_media, format_event_line  # noqa: E402
 from .house import House  # noqa: E402
 from .imaging import for_model  # noqa: E402
@@ -130,10 +131,13 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
     except ValueError as exc:  # a contributor model or a bad effort fails at start-up
         raise SystemExit(f"cannot start the hub: {exc}")
     house = House(provider, os.environ.get("HOUSE_HUMAN", "your human"), data_dir)
+    builder = Builder(house)
+    house.builder = builder  # type: ignore[attr-defined]
     threading.Thread(target=_fingerprint_sweep, args=(house,), daemon=True).start()
 
     app = FastAPI(title="Ponki")
     app.state.house = house
+    app.state.builder = builder
     app.state.token = house_token
 
     def _robot(rid: str) -> dict:
@@ -381,6 +385,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         except ValueError as exc:
             raise HTTPException(409, str(exc))
         if forget:
+            builder.forget_robot(rid)
             for sheet in (house.data_dir / "builds").glob("*.json"):
                 try:
                     data = json.loads(sheet.read_text(encoding="utf-8"))
@@ -625,14 +630,26 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
             out = house.data_dir / "takes" / datetime.now().strftime("%Y%m%d-%H%M")
         return export_media(house.data_dir, since, until, payload.get("robot"), out)
 
-    # -- builder / workshops (spec 09 fills these in) ----------------------------------
+    # -- builder / workshops (spec 09) ---------------------------------------------
     @app.get("/api/families")
     async def families():
-        return []
+        return family_catalog()
 
     @app.get("/api/workshops")
     async def workshops_list():
-        return (await system())["workshops"]
+        names = set(house.workshops)
+        names |= {r["id"] for r in house.registry.all(kind="workshop")}
+        names |= {r.get("workshop") for r in house.registry.all()
+                  if r.get("workshop")}
+        out = []
+        for name in sorted(n for n in names if n):
+            record = house.registry.get(name) or {}
+            link = house.workshops.get(name)
+            out.append({"name": name,
+                        "display_name": record.get("display_name") or name,
+                        "state": "online" if link else "offline",
+                        "since": link.since if link else None})
+        return out
 
     @app.get("/api/parts")
     async def parts():
@@ -649,100 +666,173 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
                     "HOUSE_SAM_MODEL", "sam-3.1"),
                 "detail": health.get("error") or ""}
 
-    def _build_path(bid: str) -> Path:
-        return house.data_dir / "builds" / f"{bid}.json"
-
-    def _load_build(bid: str) -> dict:
-        path = _build_path(bid)
-        if not path.exists():
+    def _get_build(bid: str):
+        try:
+            return builder.get(bid)
+        except KeyError:
             raise HTTPException(404, f"no build '{bid}'")
-        return json.loads(path.read_text(encoding="utf-8"))
 
-    def _save_build(sheet: dict) -> dict:
-        path = _build_path(sheet["id"])
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(sheet, ensure_ascii=False, indent=1), encoding="utf-8")
-        tmp.replace(path)
-        return sheet
+    def _free_build(bid: str):
+        build = _get_build(bid)
+        if build.busy:
+            raise HTTPException(409, "the builder is still busy with the last step")
+        return build
 
     @app.get("/api/builds")
     async def builds_list():
-        folder = house.data_dir / "builds"
-        sheets = []
-        if folder.exists():
-            for path in folder.glob("*.json"):
-                try:
-                    sheets.append(json.loads(path.read_text(encoding="utf-8")))
-                except ValueError:
-                    pass
-        return sorted(sheets, key=lambda s: s.get("created", 0), reverse=True)
+        return [{"id": b.id, "created": b.created,
+                 "name": b.data.get("name") or b.robot,
+                 "family": b.family_ref or None,
+                 "stage": builder.stage(b), "robot": b.robot}
+                for b in builder.list_builds()]  # oldest first
 
     @app.post("/api/builds")
     async def builds_create(payload: dict = {}):
-        sheet = {"id": uuid.uuid4().hex[:8], "created": time.time(), "stage": "device",
-                 "step": 1, "busy": False, "finished": False, "name": None,
-                 "events": [], "checks": [],
-                 "note": "the builder arrives in step 8 (spec 09)"}
-        return _save_build(sheet)
+        build = builder.create()
+        build.busy = True
+        builder.save(build)
+        house.spawn(builder.turn(
+            build,
+            "the person opened Add a robot: look for devices, then greet "
+            "them and ask what they'd like to make", role="event"))
+        return builder.sheet(build)
 
     @app.get("/api/builds/{bid}")
     async def build_one(bid: str):
-        return _load_build(bid)
+        return builder.sheet(_get_build(bid))
 
     @app.delete("/api/builds/{bid}")
     async def build_delete(bid: str):
-        _load_build(bid)
-        _build_path(bid).unlink()
+        build = _get_build(bid)
+        await builder.discard(build)
         return {"ok": True}
 
     @app.get("/api/builds/{bid}/devices")
     async def build_devices(bid: str, workshop: str = "", fresh: bool = False):
-        _load_build(bid)
-        return {"workshop": workshop, "devices": [],
-                "detail": "the builder arrives in step 8 (spec 09)"}
+        build = _get_build(bid)
+        targets = [workshop] if workshop else sorted(house.workshops)
+        devices: list = []
+        try:
+            for target in targets:
+                devices.extend(await builder.devices_on(target, fresh=fresh))
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
+        return {"workshop": workshop, "devices": devices}
 
     @app.post("/api/builds/{bid}/device")
     async def build_device(bid: str, payload: dict):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+        build = _free_build(bid)
+        workshop = str(payload.get("workshop") or build.workshop or "")
+        device = str(payload.get("device") or "")
+        try:
+            return await builder.press(
+                build, f"Chose {device} on {workshop}",
+                lambda: builder.choose_device(build, workshop, device))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     @app.post("/api/builds/{bid}/connect")
     async def build_connect(bid: str, payload: dict):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+        build = _free_build(bid)
+        fields = payload.get("fields")
+        if not isinstance(fields, dict):
+            fields = {k: v for k, v in (payload or {}).items()
+                      if k != "fields"}
+        try:
+            return await builder.press(
+                build, "Pressed connect",
+                lambda: builder.connect(build, fields))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     @app.get("/api/builds/{bid}/draft")
     async def build_draft(bid: str):
-        _load_build(bid)
-        raise HTTPException(404, "no draft family in this build yet")
+        build = _get_build(bid)
+        if not builder._is_draft(build):
+            raise HTTPException(409, "not a draft")
+        if not build.workshop:
+            raise HTTPException(502, "builder error: no workshop for this draft")
+        result = await house.act(f"@{build.workshop}", "draft_review",
+                                 {"draft": build.id}, timeout=60)
+        if not result.get("ok"):
+            raise HTTPException(502, f"builder error: {result.get('text')}")
+        data = result.get("data")
+        return data if isinstance(data, dict) else {"text": result.get("text")}
 
     @app.post("/api/builds/{bid}/approve")
     async def build_approve(bid: str, payload: dict):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+        build = _free_build(bid)
+        try:
+            await builder.approve_draft(build, str(payload.get("hash") or ""))
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
+        return builder.sheet(build)
 
     @app.post("/api/builds/{bid}/check/{cid}")
-    async def build_check(bid: str, cid: str):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+    async def build_check(bid: str, cid: str, payload: dict = {}):
+        build = _free_build(bid)
+        try:
+            return await builder.press(
+                build, f"Pressed check {cid}",
+                lambda: builder.check(build, cid))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     @app.post("/api/builds/{bid}/mark/{cid}")
     async def build_mark(bid: str, cid: str, payload: dict):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+        build = _free_build(bid)
+        worked = bool(payload.get("worked"))
+        entry = next((c for c in build.checks if str(c.get("id")) == cid), {})
+        title = entry.get("title") or cid
+        what = f"Said {title} worked" if worked else f"Said {title} didn't work"
+        try:
+            return await builder.press(
+                build, what,
+                lambda: builder.mark(build, cid, worked, payload.get("note")))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     @app.get("/api/builds/{bid}/check/{cid}.jpg")
     async def build_check_photo(bid: str, cid: str):
-        raise HTTPException(404, "no check photo yet")
+        build = _get_build(bid)
+        path = house.data_dir / "builds" / build.id / f"{cid}.jpg"
+        if not path.exists():
+            raise HTTPException(404, "no check photo yet")
+        return FileResponse(path, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
 
     @app.post("/api/builds/{bid}/soul")
     async def build_soul(bid: str, payload: dict = {}):
-        raise HTTPException(501, "the builder arrives in step 8 (spec 09)")
+        build = _free_build(bid)
+        try:
+            return await builder.press(
+                build, "Pressed give it a soul",
+                lambda: builder.give_soul(build))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     @app.post("/api/builds/{bid}/say")
     async def build_say(bid: str, payload: dict):
-        sheet = _load_build(bid)
-        if sheet.get("busy"):
-            raise HTTPException(409, "the builder is still busy with the last step")
-        sheet.setdefault("events", []).append(
-            {"t": time.time(), "from": "human", "text": payload.get("text", "")})
-        return _save_build(sheet)
+        build = _free_build(bid)
+        text = (payload.get("text") or "").strip()
+        if not text:
+            raise HTTPException(400, "say something first — the message was empty")
+        try:
+            return await builder.turn(build, text, role="human")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"builder error: {exc}")
 
     # -- websockets -----------------------------------------------------------------------
     @app.websocket("/ws/body")

@@ -169,13 +169,13 @@ class DriverOnSim(unittest.TestCase):
 class Family(unittest.TestCase):
     def test_example_plan_assigns_pins_and_wiring(self) -> None:
         config = {"name": "blinky", "board": "uno", "parts": {}}
-        lines = pins_family.plan(config, pins_family.EXAMPLE["plan"])
+        text = pins_family.plan(config, pins_family.EXAMPLE["plan"])
         self.assertIn("lamp", config["parts"])
         self.assertIsNotNone(config["parts"]["lamp"]["pins"].get("signal"))
-        self.assertTrue(any("lamp" in line for line in lines))
+        self.assertIn("lamp", text)
         checks = pins_family.checks(config, pins_family.EXAMPLE["device"])
-        self.assertEqual(len(checks), 1)
-        self.assertTrue(checks[0]["steps"])
+        self.assertEqual(list(checks), ["lamp"])
+        self.assertTrue(checks["lamp"]["steps"])
 
 
 if __name__ == "__main__":
