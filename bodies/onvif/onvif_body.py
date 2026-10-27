@@ -416,6 +416,20 @@ class CameraRobot:
         data, shot = self.photo(fresh_after=settled)
         return data, shot, heading_text(pos, self.device)
 
+    def save_home(self) -> tuple[float, float]:
+        """The view a person framed by hand becomes the home view, in the
+        config the workshop starts this driver with, so it survives restarts."""
+        pos = self.ensure_camera().wait_still()
+        home = [round(pos[0], 6), round(pos[1], 6)]
+        self.device["home"] = home
+        config = dict(self.config)
+        config["device"] = {**(config.get("device") or {}), "home": home}
+        tmp = self.config_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2))
+        tmp.replace(self.config_path)
+        self.config = config
+        return pos
+
     def _home_blocking(self) -> tuple[bytes, float, str]:
         camera = self.ensure_camera()
         home = self.device["home"]
@@ -526,6 +540,15 @@ def build_body(config: dict, config_path: Path) -> tuple[Body, CameraRobot]:
             await body.set_state(heading=heading)
             return Image(data, f"back at your home view — this is what you see "
                                f"now (photo taken {caption_time(shot)}, just now)")
+
+    if ptz:
+        @body.action("set_home", "Make where you point now your home view.",
+                     required=[], hidden=True)
+        async def set_home():
+            robot.mark_use()
+            pos = await asyncio.to_thread(robot.save_home)
+            await body.set_state(heading=heading_text(pos, robot.device))
+            return "this is my home view now"
 
     @body.action("record", "Record a short clip (the house's watch uses this).",
                  {"seconds": {"type": "number"}}, required=[], hidden=True)

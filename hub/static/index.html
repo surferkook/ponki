@@ -189,6 +189,11 @@ table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1
   .hero h1{font-size:36px}
 }
 /* --CHUNK2-- */
+.padrow{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:10px}
+.pad{display:grid;grid-template-columns:repeat(3,46px);grid-auto-rows:46px;gap:6px}
+.pad button{padding:0;font-size:18px;line-height:1}
+.saves{display:flex;gap:14px;margin-top:6px}
+.savegif{display:inline-block;font-size:13px;font-weight:600;color:var(--ink)}
 </style>
 </head>
 <body>
@@ -275,6 +280,8 @@ function bubble(e,who,inner,robot,you){
   return `<div class="bubble ${you?"you":""}" style="--rc:${esc(robot?colorOf(robot):"#888")}">
     ${robot?faceHTML(robot,30):""}<div class="body"><div class="who">${esc(who)} · <span title="${esc(fullDate(e.t))}">${esc(clock(e.t))}</span></div>${inner}</div></div>`}
 function line(e,text,bad,left){return `<div class="line ${bad?"bad":""} ${left?"left":""}" title="${esc(fullDate(e.t))}">${text}</div>`}
+function saves(e){if(!e.gif&&!e.video)return "";
+  return `<div class="saves">${e.gif?`<a class="savegif" href="${esc(e.gif)}" download>Save GIF</a>`:""}${e.video?`<a class="savegif" href="${esc(e.video)}" download>Save video</a>`:""}</div>`}
 function feedHTML(e,ctx){
   const r=byId(e.robot), n=r?disp(r):(e.robot||""), human=S.info?S.info.human:"you";
   switch(e.kind){
@@ -297,8 +304,7 @@ function feedHTML(e,ctx){
     case "watched": {let inner=photoTag(e.image);
       if(e.video)inner+=`<video src="${esc(e.video)}" controls muted loop playsinline preload="metadata" style="max-width:420px;width:100%;background:#000;border-radius:11px"></video>`;
       if(e.gif)inner+=`<img class="photo" src="${esc(e.gif)}" alt="" data-zoom="${esc(e.gif)}" style="max-width:300px;background:#fff">`;
-      if(e.gif)inner+=`<div><a href="${esc(e.gif)}" download>Save GIF</a></div>`;
-      if(e.video)inner+=`<div><a href="${esc(e.video)}" download>Save video</a></div>`;
+      inner+=saves(e);
       return bubble(e,`${n} watched ${esc(e.what||"")} · ${e.moved?"it moved":"still"} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,inner,r)}
     case "drawing": return line(e,`${esc(n)} is drawing for ${esc(e.for||human)}: ${esc(e.what||"")}…`);
     case "drew": return bubble(e,`${n} drew this for ${esc(e.for||human)} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,
@@ -310,8 +316,7 @@ function feedHTML(e,ctx){
     case "watch_media": {let inner="";
       if(e.video)inner+=`<video src="${esc(e.video)}" controls muted loop playsinline preload="metadata" style="max-width:420px;width:100%;background:#000;border-radius:11px"></video>`;
       if(e.gif)inner+=`<img class="photo" src="${esc(e.gif)}" alt="" data-zoom="${esc(e.gif)}" style="max-width:300px;background:#fff">`;
-      if(e.gif)inner+=`<div><a href="${esc(e.gif)}" download>Save GIF</a></div>`;
-      if(e.video)inner+=`<div><a href="${esc(e.video)}" download>Save video</a></div>`;
+      inner+=saves(e);
       return bubble(e,`${n}'s clip of ${esc(e.what||"")} is ready`,inner,r)}
     case "noticed": return line(e,`${esc(n)} noticed: ${esc(e.text||"")}${e.staged?" (staged)":""}`);
     case "overheard": return line(e,e.promise?`${esc(n)} overheard ${esc(disp(byId(e.frm))||e.frm||"")}: a moment it promised to mark`
@@ -463,11 +468,24 @@ function bodyHTML(r){
     `<span class="pill">${esc(k)}: ${esc(typeof v==="object"?JSON.stringify(v):v)}</span>`).join("")}</div>`
     :`<p class="hint">This body doesn't report any state.</p>`}</div>`;
   h+=`<h2>Try its actions</h2><p class="hint">Runs the body directly, without the brain.</p>`;
+  const pantilt=r.actions.turn&&r.actions.set_home;   // a camera on a pan/tilt head: steer it with arrows
   for(const [name,a] of acts){
+    if(pantilt&&name==="set_home")continue;
     const first=((a.description||"").split(". ")[0]||"")+(a.description&&!String(a.description).endsWith(".")?".":"");
+    const result=`<span class="result" data-result="${esc(name)}">${esc(S.results[r.name+":"+name]||"")}</span>`;
+    if(pantilt&&name==="turn"){
+      const home=r.actions.look_home?`<button type="button" data-home title="Back to the home view">⌂</button>`:"<span></span>";
+      h+=`<div class="card"><h2 class="display" style="font-size:17px">turn</h2>
+        <p class="hint">Steer the head; each press turns it one step and takes a photo.</p>
+        <div class="padrow"><div class="pad"><span></span><button type="button" data-turn="0,1" title="Up">▲</button><span></span>
+          <button type="button" data-turn="-1,0" title="Left">◀</button>${home}<button type="button" data-turn="1,0" title="Right">▶</button>
+          <span></span><button type="button" data-turn="0,-1" title="Down">▼</button><span></span></div>
+          <label class="hint">Step <select id="turnstep"><option value="5">small (5°)</option><option value="15" selected>medium (15°)</option><option value="45">big (45°)</option></select></label></div>
+        <div class="composer"><button type="button" data-sethome>Save this view as home</button>${result}</div></div>`;
+      continue}
     h+=`<div class="card"><h2 class="display" style="font-size:17px">${esc(name)}${r.voice===name?" (its voice)":""}</h2>
       <p class="hint">${esc(first)}</p><form data-action="${esc(name)}">${schemaFields(name,a.params)}
-      <button type="submit">Run</button><span class="result" data-result="${esc(name)}">${esc(S.results[r.name+":"+name]||"")}</span></form></div>`}
+      <button type="submit">Run</button>${result}</form></div>`}
   return h+`</div>`;
 }
 function wireBody(r){
@@ -483,6 +501,17 @@ function wireBody(r){
       $("#findmsg").textContent=String(res.text||"").split("\n")[0];
       $("#findmsg").className=res.ok?"hint good":"hint bad"}
     catch(e){$("#findmsg").textContent=e.message;$("#findmsg").className="hint bad"}};
+  const steer=async(action,args,msg)=>{const slot=$('[data-result="turn"]'), btns=$$("[data-turn],[data-home],[data-sethome]");
+    btns.forEach(b=>b.disabled=true); slot.textContent=msg; slot.className="result";
+    try{const res=await post(`/api/robots/${encodeURIComponent(r.name)}/act`,{action,args});
+      slot.textContent=res.text||""; slot.className="result "+(res.ok?"good":"bad")}
+    catch(e){slot.textContent=e.message; slot.className="result bad"}
+    S.results[r.name+":turn"]=slot.textContent; btns.forEach(b=>b.disabled=false)};
+  $$("[data-turn]").forEach(b=>b.onclick=()=>{const step=+($("#turnstep")||{}).value||15;
+    const [p,t]=b.dataset.turn.split(",").map(Number);
+    steer("turn",{pan:p*step,tilt:t*Math.min(step,30)},"Turning…")});
+  const hb=$("[data-home]"); if(hb)hb.onclick=()=>steer("look_home",{},"Going home…");
+  const sh=$("[data-sethome]"); if(sh)sh.onclick=()=>steer("set_home",{},"Saving…");
   $$("#main form[data-action]").forEach(form=>{
     form.onsubmit=async ev=>{ev.preventDefault();const name=form.dataset.action;
       const schema=(r.actions[name]||{}).params; const args=collectArgs(form,schema);
