@@ -534,8 +534,11 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
                      "kind": r.get("kind"), "family": r.get("family"),
                      "online": r["id"] in house.bodies or r["id"] in house.fixtures}
                     for r in house.registry.all() if r.get("workshop") == name]
+            link = house.workshops.get(name)
             workshops.append({"id": name, "display_name": record.get("display_name") or name,
-                              "online": name in house.workshops, "record": record, "runs": runs})
+                              "online": name in house.workshops, "record": record, "runs": runs,
+                              "families": list((link.state or {}).get("families") or [])
+                              if link else []})
         equipment = []
         for rid, link in sorted(house.fixtures.items()):
             if link.manifest.get("kind") == "workshop":

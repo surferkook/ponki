@@ -58,14 +58,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 /* -- sidebar -- */
 #side{border-right:1px solid var(--line);padding:20px 14px;overflow-y:auto;
   display:flex;flex-direction:column;gap:4px;background:var(--bg)}
-.brand{font-family:"Bricolage Grotesque",ui-rounded,sans-serif;font-size:26px;font-weight:800;letter-spacing:-.02em;padding:0 8px}
-.liveline{padding:0 8px 10px;color:var(--muted);font-size:13px}
+.brand{font-family:"Bricolage Grotesque",ui-rounded,sans-serif;font-size:26px;font-weight:800;line-height:1;letter-spacing:-.03em;padding:0 8px}
+.liveline{padding:6px 8px 10px;color:var(--muted);font-size:13px;line-height:1.4}
 .row{display:flex;gap:10px;align-items:center;padding:8px;border-radius:14px;
   cursor:pointer;border:1px solid transparent;background:none;color:var(--ink);text-align:left;width:100%}
 .row:hover{background:color-mix(in srgb,var(--me) 8%,var(--surface))}
 .row.sel{background:var(--surface);border-color:var(--line);box-shadow:0 0 0 1px var(--line)}
-.row .nm{font-weight:600;line-height:1.25}
-.row .st{font-size:12.5px;color:var(--muted);line-height:1.3}
+.row .nm{font:700 16px/1.2 "Bricolage Grotesque",ui-rounded,system-ui,sans-serif}
+.row .st{font-size:13px;font-weight:400;color:var(--muted);line-height:1.4}
 .row .tx{flex:1;min-width:0}
 .face{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-family:"Bricolage Grotesque",ui-rounded,sans-serif;font-weight:800;overflow:hidden;position:relative}
@@ -78,7 +78,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 .sidehead{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--muted);margin:14px 8px 4px}
 #foot{margin-top:auto;padding:10px 8px 0;border-top:1px solid var(--line);
-  font-size:13px;color:var(--ink-2);display:grid;gap:5px}
+  font-size:13px;color:var(--muted);display:grid;gap:5px}
+#foot .val{font-weight:600;color:var(--ink-2)}
+#foot .switch{text-decoration:underline dotted;text-underline-offset:3px}
 .switch{background:none;border:none;color:var(--me);padding:0;font-weight:600}
 /* -- main -- */
 #main{overflow-y:auto;padding:28px 32px 48px;min-width:0}
@@ -811,7 +813,7 @@ async function refreshAll(){
     ["/api/mic","mic"],["/api/system","system"],["/api/voices","voices"],["/api/families","families"]];
   for(const [path,key] of jobs){try{const v=await api(path);
     if(key==="info")S.info=v; else if(key==="robots")S.robots=v; else if(key==="grounding")S.grounding=v;
-    else if(key==="builds")S.builds=v; else if(key==="workshops")S.workshops=v;
+    else if(key==="builds")S.builds=v; else if(key==="workshops")S.workshops=(v||[]).map(w=>({...w,id:w.id||w.name,online:w.online??w.state==="online"}));
     else if(key==="departed")S.departed=v; else if(key==="mic")S.mic=v;
     else if(key==="system")S.system=v; else if(key==="voices")S.voices=v;
     else if(key==="families")S.families=v}catch(e){}}
