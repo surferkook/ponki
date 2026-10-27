@@ -306,6 +306,12 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         house.emit("soul_edited", rid)
         return {"ok": True}
 
+    @app.put("/api/robots/{rid}/looks")
+    async def looks(rid: str, payload: dict):
+        _robot(rid)
+        house.soul(rid).set_looks(str(payload.get("looks") or ""))
+        return {"ok": True}
+
     @app.post("/api/robots/{rid}/reset")
     async def reset(rid: str, payload: dict):
         _robot(rid)

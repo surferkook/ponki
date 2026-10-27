@@ -37,6 +37,14 @@ ROOM_KEEP = 12
 ASK_WAIT = 8.0
 PROMISE_WAIT = 60.0
 WATCH_SECONDS = 12
+# a short "stop" from a person halts the whole house: "Guys, stop", "Keiki stop!", "stoppen"
+STOP_WORDS = re.compile(r"\b(stop|stopp?en|halt|freeze)\b", re.IGNORECASE)
+STOP_MAX_WORDS = 6
+
+
+def is_stop(text: str) -> bool:
+    """A person telling the house to stop, not a sentence that happens to say 'stop'."""
+    return bool(STOP_WORDS.search(text or "")) and len((text or "").split()) <= STOP_MAX_WORDS
 _SOUND_NAME = re.compile(r"beep|chirp|tune|song|melody|sound|buzz|play_music")
 
 FLOOR_PROMPT = (
@@ -51,7 +59,9 @@ FLOOR_PROMPT = (
     "unless a robot was named. Some robots keep promises or habits: if the line "
     "is clearly the moment for one — it happened, just now: not a plan, an "
     "attempt or a question — put that robot in also, whoever else reacts; never "
-    "for its own lines. When open is false, react must be null; only promises "
+    "for its own lines. One step of a task still underway (a robot reporting a "
+    "move it was asked to make while someone guides it) is not a finished task: "
+    "that moment comes when the whole task is said to be done. When open is false, react must be null; only promises "
     "count. Reply with JSON only: "
     '{"react": "<robot id>" | null, "also": ["<robot id>", ...], "why": "<a few words>"}'
 )
@@ -137,6 +147,12 @@ class House:
         self._voice_next = self._max_on_disk(self.data_dir / "voice", ".wav")
         self.room: deque = deque(maxlen=ROOM_KEEP)
         self._speaking: dict[str, int] = {}
+        self._promised_at: dict[str, float] = {}   # rid → when the floor last gave it a promise's moment
+        # for telling a camera which way a robot it's guiding now faces (see _facing_note)
+        self._moves: dict[str, list[tuple[float, str, float]]] = {}   # rid → (t, drive|turn, amount)
+        # camera rid → {"points": every match of its last locate,
+        #               "robots": {rid: {"at": (x, y), "t": seen at, "facing": (vx, vy) | None}}}
+        self._sightings: dict[str, dict] = {}
         self._voice_lock = asyncio.Lock()
         self._voice_spans: deque = deque(maxlen=20)
         self._last_addressed: tuple[str, float] | None = None
@@ -475,6 +491,8 @@ class House:
     async def _run_turn(self, rid: str, text: str, source: str, chain: tuple = (),
                         depth: int = 0, promised: bool = False) -> str:
         if source == "human":
+            if is_stop(text):
+                await self.stop_everything()
             # a person talking to a busy robot interrupts its current turn;
             # this message then runs as its own turn right after
             soul = self.souls.get(rid)
@@ -486,6 +504,18 @@ class House:
         except Exception as exc:
             self.emit("error", rid, text=f"turn failed: {exc}")
             raise
+
+    async def stop_everything(self) -> None:
+        """A person said stop: every busy soul ends its turn at the next step (its housemates'
+        asks included), and every body that can stop halts now: a rover mid-drive is the
+        one robot that can fall off a table while a guide is still waiting on it."""
+        for soul in self.souls.values():
+            soul.request_interrupt("a person said stop")
+        stoppable = [rid for rid, link in self.bodies.items()
+                     if "stop" in (link.manifest.get("actions") or {})]
+        if stoppable:
+            await asyncio.gather(*(self.act(rid, "stop", {}, timeout=5) for rid in stoppable),
+                                 return_exceptions=True)
 
     async def _wait_turn(self, rid: str) -> None:
         """Wait while a housemate is speaking, then a breath (spec 03 §11)."""
@@ -519,6 +549,12 @@ class House:
             if not is_voice and action != "stop":
                 await self._wait_turn(rid)
             self.emit("act", rid, action=action, args=args)
+            if action in ("drive", "turn"):
+                amount = args.get("cm" if action == "drive" else "degrees")
+                if isinstance(amount, (int, float)) and amount:
+                    moves = self._moves.setdefault(rid, [])
+                    moves.append((time.time(), action, float(amount)))
+                    del moves[:-20]
         if is_sound:  # a sound holds the floor like speech, until it has finished
             await self._voice_lock.acquire()
             self._speaking[rid] = self._speaking.get(rid, 0) + 1
@@ -610,11 +646,81 @@ class House:
         apilog.sam_call(rid, "locate", what, photo=label,
                         found=f"{total} found")
         text = grounding.describe(found, ms, concepts)
+        note = self._facing_note(rid, found, started)
+        if note:
+            text += "\n" + note
         url = self._store_eye(rid, res.get("overlay", ""))
         self.emit("located", rid, what=what, image=url, found=found,
                   ms=ms, text=text)
         return {"ok": True, "text": text, "image": res.get("overlay"),
                 "usd": 0.0025 * len(concepts)}
+
+    def _facing_note(self, cam: str, found: dict, now: float) -> str:
+        """Tell a camera which way a robot it's guiding faces, in its own left/right terms. A
+        robot is recognised by its finder words, or, when it drove since it was last seen, as
+        the one match that wasn't in the last photo (everything else stood still). Its facing
+        is the way it drove between two sightings, turned by any turn after that drive, and
+        is kept, so a guide starting a new task still knows it."""
+        from . import grounding
+
+        seen = self._sightings.setdefault(cam, {"points": [], "robots": {}, "t": 0.0})
+        points = [(c, tuple(item["center"])) for c, items in found.items() for item in items]
+        near = lambda a, b: abs(a[0] - b[0]) + abs(a[1] - b[1]) < 0.025  # noqa: E731
+        new = [pt for _, pt in points if not any(near(pt, q) for q in seen["points"])]
+        gone = [q for q in seen["points"] if not any(near(q, pt) for _, pt in points)]
+        last_t, seen["t"], seen["points"] = seen["t"], now, [pt for _, pt in points]
+
+        def moves_since(rid: str, t: float) -> list[tuple[str, float]]:
+            return [(kind, amount) for when, kind, amount in self._moves.get(rid, []) if when > t]
+
+        spotted: dict[str, tuple[float, float]] = {}
+        for other in self.residents():                       # by its finder words
+            looks = (self.soul(other).data.get("looks") or "").lower()
+            mine = [pt for c, pt in points if looks and c.lower() == looks]
+            if len(mine) == 1:
+                spotted[other] = mine[0]
+        drove = [r for r, rec in seen["robots"].items()
+                 if any(kind == "drive" for kind, _ in moves_since(r, rec["t"]))]
+        if len(drove) == 1 and drove[0] not in spotted and len(new) == 1:
+            spotted[drove[0]] = new[0]                       # the one new thing in view
+        strangers = [r for r in self._moves if r != cam and r not in seen["robots"]
+                     and last_t and any(kind == "drive" for kind, _ in moves_since(r, last_t))]
+        if not drove and len(strangers) == 1 and len(new) == 1 and len(gone) == 1:
+            # not seen before by name, but it's the one thing that left one spot for another
+            seen["robots"][strangers[0]] = {"at": gone[0], "t": last_t, "facing": None}
+            spotted.setdefault(strangers[0], new[0])
+
+        notes = []
+        for rid, rec in list(seen["robots"].items()):
+            since = moves_since(rid, rec["t"])
+            name = self.label(rid)
+            if rid in spotted and any(kind == "drive" for kind, _ in since):
+                way = grounding.heading(rec["at"], spotted[rid])
+                if way is None:
+                    continue
+                last = max(i for i, (kind, _) in enumerate(since) if kind == "drive")
+                turned = sum(a for kind, a in since[last + 1:] if kind == "turn")
+                text = (f"{name} drove from x={rec['at'][0]:.2f}, y={rec['at'][1]:.2f} to "
+                        f"x={spotted[rid][0]:.2f}, y={spotted[rid][1]:.2f} since you last saw it")
+                if abs(turned) >= 5:
+                    way = grounding._turned(*way, turned)
+                    text += f", and after that drive {grounding.turned_words(turned)}"
+                rec["facing"] = way
+                notes.append(f"{text}: {grounding.facing_words(*way)}")
+            elif rec.get("facing") and not any(kind == "drive" for kind, _ in since):
+                turned = sum(a for kind, a in since if kind == "turn")
+                way = grounding._turned(*rec["facing"], turned) if abs(turned) >= 5 else rec["facing"]
+                head = f"{name} hasn't driven since you last saw it"
+                if abs(turned) >= 5:
+                    head += f", but {grounding.turned_words(turned)}"
+                notes.append(f"{head}: {grounding.facing_words(*way)}")
+                if rid in spotted:
+                    rec["facing"] = way
+            if rid in spotted:
+                rec.update(at=spotted[rid], t=now)
+        for rid, pt in spotted.items():                      # first sightings
+            seen["robots"].setdefault(rid, {"at": pt, "t": now, "facing": None})
+        return "\n".join(notes)
 
     async def watch(self, rid: str, what: str, seconds=None) -> dict:
         """Record a clip, track what is named, strip + GIF/video (spec 05)."""
@@ -1143,8 +1249,10 @@ class House:
             why = str(decision.get("why") or "")[:160]
             if open_:
                 pick = decision.get("react")
+            # one moment, one keeping: the cheers that follow an arrival are the same moment
             also = [r for r in (decision.get("also") or [])
-                    if r in listeners and r != pick and self.soul(r).promises]
+                    if r in listeners and r != pick and self.soul(r).promises
+                    and time.time() - self._promised_at.get(r, 0.0) > PROMISE_WAIT]
         except Exception as exc:
             why = f"no decision ({type(exc).__name__})"
             pick, also = None, []
@@ -1156,6 +1264,7 @@ class House:
             return
         self.emit("floor", speaker, react=pick, also=also, why=why)
         for other in also:
+            self._promised_at[other] = time.time()
             self.emit("overheard", other, frm=speaker, promise=True)
             self.spawn(self._floor_turn(other, speaker, text, depth, promised=True))
         if pick is not None:
@@ -1265,8 +1374,10 @@ class House:
             actions = sorted(name for name, a in (man.get("actions") or {}).items()
                              if not (a or {}).get("hidden"))
             home = "home" if other in self.bodies else "body offline"
+            looks = self.soul(other).data.get("looks")
+            seen = f"To a camera's finder it's '{looks}'. " if looks else ""
             lines.append(f"- {display} ({home}): {man.get('description', '')} "
-                         f"Can: {', '.join(actions)}.")
+                         f"{seen}Can: {', '.join(actions)}.")
         gone: dict[str, dict] = {}
         for entry in self.departed:
             gone[entry["name"]] = entry

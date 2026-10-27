@@ -121,6 +121,53 @@ def describe(found: dict, ms: float, concepts: list[str] | None = None) -> str:
     return "\n".join(blocks)
 
 
+# -- which way a moved robot faces -------------------------------------------------
+# A camera looks along the floor from one end, so a move away from it shows up much
+# shorter than the same move sideways, and more so the farther off it is (higher in the
+# photo). Before reading a direction off two sightings, stretch the up/down part back.
+ASPECT = 16 / 9                        # x and y are 0-1 of a wide photo
+DIRECTIONS = ["to the right of your view", "away from you and to the right",
+              "away from you (up the photo)", "away from you and to the left",
+              "to the left of your view", "toward you and to the left",
+              "toward you (down the photo)", "toward you and to the right"]
+
+
+def _depth_stretch(y: float) -> float:
+    return 1.0 + 2.5 * (1.0 - min(max(y, 0.0), 1.0))
+
+
+def _direction_words(vx: float, vy: float) -> str:
+    """vx right, vy down (on the floor, depth already stretched) → eight-way words."""
+    import math
+    sector = round(math.atan2(-vy, vx) / (math.pi / 4)) % 8
+    return DIRECTIONS[sector]
+
+
+def _turned(vx: float, vy: float, degrees: float) -> tuple[float, float]:
+    """Rotate a heading by a turn (+ = to its left), seen from above with y pointing down."""
+    import math
+    t = math.radians(degrees)
+    return vx * math.cos(t) + vy * math.sin(t), -vx * math.sin(t) + vy * math.cos(t)
+
+
+def heading(before: tuple[float, float], after: tuple[float, float]) -> tuple[float, float] | None:
+    """The way it drove between two sightings, on the floor (depth stretched); None if it barely moved."""
+    dx = (after[0] - before[0]) * ASPECT
+    dy = (after[1] - before[1]) * _depth_stretch((after[1] + before[1]) / 2)
+    return (dx, dy) if (dx * dx + dy * dy) ** 0.5 >= 0.03 else None
+
+
+def facing_words(vx: float, vy: float) -> str:
+    lx, ly = _turned(vx, vy, 90)
+    return (f"it now faces {_direction_words(vx, vy)}. Its left is {_direction_words(lx, ly)}; "
+            f"its right is {_direction_words(-lx, -ly)}. (Worked out from your photos; depth "
+            f"is squeezed, so take angles as rough.)")
+
+
+def turned_words(degrees: float) -> str:
+    return f"it turned {abs(degrees):.0f}° to its {'left' if degrees > 0 else 'right'}"
+
+
 def _shape_words(peak: dict) -> str:
     parts = []
     wider, taller = peak.get("wider", 0), peak.get("taller", 0)

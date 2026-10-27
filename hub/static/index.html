@@ -503,6 +503,9 @@ function soulHTML(r){
     <textarea id="persona">${esc(r.persona||"")}</textarea>
     <div class="composer"><button type="button" id="savepersona">Save persona</button></div>
     <p class="hint" id="personamsg">Saving starts a fresh conversation. Memories carry over.</p></div>`;
+  h+=`<div class="card"><h2>What a camera looks for</h2><form id="looksform" class="composer">
+    <input type="text" id="looks" maxlength="60" placeholder="e.g. small blue robot car" value="${esc(r.looks||"")}"><button>Save</button></form>
+    <p class="hint" id="looksmsg">The words a camera's finder uses to spot ${esc(disp(r))}: what it looks like, never its name. Housemates are told.</p></div>`;
   h+=`<div class="card"><h2>Portrait</h2><div class="hero" style="margin:0">${faceHTML(r,96)}
     <div><p>“${esc(r.tagline||"No tagline yet.")}”</p>
     <p class="hint">Colour ${esc(colorOf(r))} · drawn by the brain · painted by Muse Image ${r.portrait?"":"(not yet)"}</p>
@@ -553,6 +556,11 @@ function wireSoul(r){
       body:JSON.stringify({persona:$("#persona").value})});
       $("#personamsg").textContent="Saved. The next conversation starts with this persona."}
     catch(e){$("#personamsg").textContent=e.message}};
+  $("#looksform").onsubmit=async ev=>{ev.preventDefault();
+    try{await api(`/api/robots/${enc}/looks`,{method:"PUT",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({looks:$("#looks").value})});
+      $("#looksmsg").textContent="Saved. Housemates are told on their next turn."; refreshRobots()}
+    catch(e){$("#looksmsg").textContent=e.message}};
   const draw=$("#drawbtn"); if(draw)draw.onclick=async()=>{draw.disabled=true;draw.textContent="Drawing…";
     try{await post(`/api/robots/${enc}/portrait`)}catch(e){$("#drawmsg").textContent=e.message;draw.disabled=false}};
   const pitch=$("#pitch"),speed=$("#speed");

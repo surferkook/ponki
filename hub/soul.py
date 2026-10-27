@@ -110,13 +110,15 @@ class Soul:
         self._mid_lines: list[str] = []
         self.busy_since: float | None = None
         self._interrupt = False
+        self._interrupt_why = ""
         self._view_fresh = False   # a fresh photo since the last move-ish ask
 
-    def request_interrupt(self) -> None:
-        """A person is talking to this robot mid-turn: end the turn at the
-        next step boundary (their message then gets its own turn)."""
+    def request_interrupt(self, why: str = "a person is talking to me") -> None:
+        """A person is talking to this robot mid-turn (or said stop): end the
+        turn at the next step boundary (their message then gets its own turn)."""
         if self.lock.locked():
             self._interrupt = True
+            self._interrupt_why = why
 
     # -- persistence ---------------------------------------------------------
     def save(self) -> None:
@@ -157,6 +159,7 @@ class Soul:
             "born": self.data.get("born"),
             "color": self.data.get("color") or fallback_color(self.id),
             "tagline": self.data.get("tagline") or "",
+            "looks": self.data.get("looks") or "",
             "portrait": (f"/api/robots/{self.id}/portrait.webp?v={self.data.get('portrait_v', 0)}"
                          if self.data.get("portrait") else None),
             "painting": bool(self.data.get("painting")),
@@ -254,6 +257,12 @@ class Soul:
 
     def set_display_name(self, name: str) -> None:
         self.data["display_name"] = name
+        self.save()
+
+    def set_looks(self, text: str) -> None:
+        """What a camera's finder should search for to find this robot ('small blue robot
+        car'): housemates are told it, so a guide doesn't burn its turn guessing words."""
+        self.data["looks"] = " ".join((text or "").split())[:60]
         self.save()
 
     def set_voice(self, v: dict) -> None:
@@ -386,11 +395,31 @@ class Soul:
                        "front, not its back). You can name several things at once, comma-"
                        "separated, and get their positions in the same fresh photo. Guiding "
                        "rules: never send a move when either the goal or the robot is missing "
-                       "from your latest locate — find them again first. You cannot tell which "
-                       "way a robot faces from one still photo; if you're not sure, ask for a "
-                       "tiny 5 cm test drive forward, then locate again: the way it moved in "
-                       "the picture is the way it faces. One short move per ask (at most ~20 cm "
-                       "or ~45°), then locate again before the next one.",
+                       "from your latest locate — find them again first. Your photo looks along "
+                       "the room from where you stand, so distance is squeezed: the far half "
+                       "of the floor or table fits in a thin strip near the top, and something "
+                       "far away that looks well off to the side is usually only a small turn "
+                       "away. Don't steer by the angle in the picture. Instead, drive most of "
+                       "the way in one move (stop well short of the goal and of any edge or "
+                       "obstacle), locate again, and make the turn once it's close, where the "
+                       "photo shows true angles. Which way a robot faces you see from how it "
+                       "moved between two photos, so a first long drive also tells you that; "
+                       "after it has driven, your locate says which way it now faces and "
+                       "where its left and right are: trust that over your memory of its "
+                       "moves, and end each ask with the drive, not a turn. "
+                       "Left and right are the robot's own, not yours: while it drives away "
+                       "from you (up the photo) they match yours, but once it faces you "
+                       "(it came down the photo, or you see its front) its left is your "
+                       "right. Before every turn, work out which way it faces and which side "
+                       "of it the goal is on. Never send it toward an edge it is close to. "
+                       "Don't mention speed (slow only wastes time), and put a turn and the "
+                       "drive after it in one ask: every ask and every locate costs a step of "
+                       "your turn. Your asks are spoken out loud, so talk to it like a friend "
+                       "in your own voice, never like a manual: where the goal is, then the "
+                       "move, a little different each time. ('The mug's behind you, on my "
+                       "left. Swing round about 150 degrees to your left and roll 60 "
+                       "centimetres, then I'll check!' 'Nearly there! Ten degrees to your "
+                       "right and 20 centimetres more.')",
                        {"what": {"type": "string",
                                   "description": "A short English noun phrase for what it looks "
                                                  "like, e.g. 'plant', 'red bag', 'yellow flag', "
@@ -418,8 +447,11 @@ class Soul:
         house_tool("say",
                    "Say something out loud right now, in the middle of your task, and carry on "
                    "once it is spoken. For narrating a sequence (say what's next, do it, say "
-                   "the next). Short, like replies. Your final reply is spoken too, so if you "
-                   "have said it all, end with just (silence).",
+                   "the next). Short, like replies. When a task will take more than a few "
+                   "seconds (guiding someone, watching, drawing), first say a short line "
+                   "that you're on it, in the same step as your first action: text you "
+                   "write next to a tool call is never heard. Your final reply is spoken "
+                   "too, so if you have said it all, end with just (silence).",
                    {"text": {"type": "string"}}, ["text"])
         house_tool("promise",
                    "Keep a promise someone asks of you for moments to come, or a habit of your "
@@ -688,7 +720,7 @@ class Soul:
                     stopped = True
                     reply = ""
                     house.emit("thought", self.id,
-                               text="(stopped — a person is talking to me)")
+                               text=f"(stopped — {self._interrupt_why})")
                     break
                 step = await conv.step()
                 steps += 1
@@ -704,6 +736,12 @@ class Soul:
                 if not step.tool_calls:
                     reply = step.text
                     break
+                if self._interrupt:
+                    # told to stop while it was thinking: its next actions don't happen
+                    conv.add_tool_results([
+                        ToolResult(c.id, f"not done: {self._interrupt_why}", is_error=True)
+                        for c in step.tool_calls])
+                    continue
                 tools_used.extend(c.name for c in step.tool_calls)
                 changed_outside = house.view_for(self.id) != self.data.get("told", "")
                 results = await asyncio.gather(
