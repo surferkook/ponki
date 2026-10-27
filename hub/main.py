@@ -156,6 +156,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         info = {
             "name": rid,
             "online": link is not None,
+            "home": house.is_home(rid),
             "since": link.since if link else None,
             "display_name": (record or {}).get("display_name") or man.get("display_name") or rid,
             "description": man.get("description", ""),

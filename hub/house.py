@@ -227,6 +227,12 @@ class House:
     def workshops(self) -> dict[str, Link]:
         return self.fixtures_of("workshop")
 
+    def is_home(self, rid: str) -> bool:
+        """Its body is connected and its device answers: a driver whose device has gone
+        (a rover switched off) says so with "reachable": false in its state."""
+        link = self.bodies.get(rid)
+        return link is not None and (link.state or {}).get("reachable") is not False
+
     def residents(self) -> dict[str, str]:
         out: dict[str, str] = {}
         for rec in self.registry.all(kind="robot"):
@@ -1434,7 +1440,8 @@ class House:
             man = self.manifest(other)
             actions = sorted(name for name, a in (man.get("actions") or {}).items()
                              if not (a or {}).get("hidden"))
-            home = "home" if other in self.bodies else "body offline"
+            home = "home" if self.is_home(other) else (
+                "its device is off" if other in self.bodies else "body offline")
             looks = self.soul(other).data.get("looks")
             seen = f"To a camera's finder it's '{looks}'. " if looks else ""
             lines.append(f"- {display} ({home}): {man.get('description', '')} "

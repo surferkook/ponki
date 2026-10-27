@@ -51,19 +51,20 @@ class RoverBody:
             persona_hint=config.get("persona_hint"),
             personality=config.get("personality"))
         self.body.state["rover"] = OFFLINE_TEXT
+        self.body.state["reachable"] = False  # the house counts it away until the rover calls in
         self._register()
 
     # -- link state ------------------------------------------------------------
     async def _on_change(self, online: bool, hello: dict) -> None:
         if online:
-            await self.body.set_state(rover="online",
+            await self.body.set_state(rover="online", reachable=True,
                                       battery=hello.get("battery"))
             try:  # best effort: its screen shows who it is
                 await self.link.call("name", text=self.display, timeout=5)
             except Exception:
                 pass
         else:
-            await self.body.set_state(rover=OFFLINE_TEXT)
+            await self.body.set_state(rover=OFFLINE_TEXT, reachable=False)
 
     async def battery_loop(self) -> None:
         while True:

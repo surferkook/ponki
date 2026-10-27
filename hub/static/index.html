@@ -194,6 +194,11 @@ table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1
 .expect{margin-top:8px;padding:8px 11px;border-radius:10px;background:color-mix(in srgb,#d39a2c 16%,var(--surface));font-size:14px}
 .pill.warn{background:color-mix(in srgb,#d39a2c 22%,var(--surface))}
 .scanrow{margin:2px 0}
+.pres{position:relative;flex:none;display:inline-flex}
+.pres::after{content:"";position:absolute;right:1px;bottom:1px;width:11px;height:11px;border-radius:50%;
+  background:var(--good);box-shadow:0 0 0 2.5px var(--bg),0 0 6px color-mix(in srgb,var(--good) 60%,transparent)}
+.pres.off::after{background:var(--bad);box-shadow:0 0 0 2.5px var(--bg)}
+.row.sel .pres::after{box-shadow:0 0 0 2.5px var(--surface)}
 .facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;white-space:normal}
 .fact{font-size:12.5px;line-height:1.3;padding:4px 10px;border-radius:99px;background:var(--surface);
   border:1px solid color-mix(in srgb,var(--rc,#888) 50%,var(--line))}
@@ -251,13 +256,15 @@ async function api(path,opts){const res=await fetch(path,opts);
   if(!res.ok){let d=res.statusText;try{d=(await res.json()).detail||d}catch(e){} throw new Error(d)}
   const ct=res.headers.get("content-type")||""; return ct.includes("json")?res.json():res}
 function post(path,body){return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})}
+/* home = its body is connected and its device answers (a switched-off rover is away) */
+function isHome(r){return !!r&&(r.home??r.online)}
 function faceHTML(r,size,extra){const c=colorOf(r),n=disp(r)||"?";
-  const cls=r&&r._gone?"gone":(r&&!r.online?"away":"");
+  const cls=r&&r._gone?"gone":(r&&!isHome(r)?"away":"");
   const inner=r&&r.portrait?`<img src="${esc(r.portrait)}" alt="">`:`<span style="color:${c}">${esc(n[0]||"?")}</span>`;
   return `<span class="face ${cls} ${extra||""}" data-face="${esc(r?r.name:"")}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.42)}px;border:2px solid ${c};background:${c}38">${inner}</span>`}
 function houseFace(size){return `<span class="disc" style="width:${size}px;height:${size}px" aria-hidden="true">⌂</span>`}
 function renderSidebar(){
-  const home=S.robots.filter(r=>r.online).length;
+  const home=S.robots.filter(isHome).length;
   const unfinished=[...S.builds].reverse().find(b=>!buildDone(b));
   const won=S.workshops.filter(w=>w.online).length;
   const sysBad=S.system?Object.values(S.system.services||{}).filter(v=>!v.ready).length
@@ -270,8 +277,9 @@ function renderSidebar(){
     if(typeof v==="object"&&v!==null)return `${k.replace(/_/g," ")} ${Object.values(v).join(" ")}`;
     return `${k.replace(/_/g," ")} ${v}`};
   for(const r of [...S.robots].sort((a,b)=>a.name<b.name?-1:1)){
-    const st=r.online?["home",...Object.entries(r.state||{}).map(readable)].join(", "):"away";
-    h+=`<button class="row ${S.sel===r.name?"sel":""}" data-sel="${esc(r.name)}">${faceHTML(r,44)}<span class="tx"><span class="nm">${esc(disp(r))}</span><br><span class="st">${esc(st)}</span></span></button>`}
+    const shown=Object.entries(r.state||{}).filter(([k])=>k!=="reachable");
+    const st=isHome(r)?["home",...shown.map(readable)].join(", "):r.online?["away",...shown.map(readable)].join(", "):"away";
+    h+=`<button class="row ${S.sel===r.name?"sel":""}" data-sel="${esc(r.name)}"><span class="pres ${isHome(r)?"on":"off"}" title="${isHome(r)?"home":"away"}">${faceHTML(r,44)}</span><span class="tx"><span class="nm">${esc(disp(r))}</span><br><span class="st">${esc(st)}</span></span></button>`}
   h+=`<button class="row ${S.sel==="add"?"sel":""}" data-sel="add"><span class="disc dash">+</span><span class="tx"><span class="nm">Add a robot</span><br><span class="st">${unfinished?"Building "+esc(unfinished.name||"a robot")+"…":won?won+" workshop"+(won>1?"s":"")+" ready":"No workshop online"}</span></span></button>`;
   h+=`<button class="row ${S.sel==="system"?"sel":""}" data-sel="system"><span class="disc" aria-hidden="true">⚙</span><span class="tx"><span class="nm">System</span><br><span class="st">${sysBad?sysBad+" things need a look":"All running"}</span></span></button>`;
   if(S.departed.length){h+=`<div class="sidehead">Moved on</div>`;
@@ -434,7 +442,7 @@ function viewHouse(){
   for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
 function heroHTML(r){
-  const st=r.online?`home${r.state&&r.state.pose?", in "+esc(r.state.pose):""} · connected ${ago(r.since)}`
+  const st=r.online&&!isHome(r)?"Away — its body is connected, but its device isn't answering":r.online?`home${r.state&&r.state.pose?", in "+esc(r.state.pose):""} · connected ${ago(r.since)}`
     :"Away — its body isn't connected right now";
   return `<div class="hero">${faceHTML(r,112)}<div><h1>${esc(disp(r))}</h1>
     ${r.tagline?`<span class="tagbubble">“${esc(r.tagline)}”</span>`:""}
