@@ -45,6 +45,10 @@ STOP_MAX_WORDS = 6
 def is_stop(text: str) -> bool:
     """A person telling the house to stop, not a sentence that happens to say 'stop'."""
     return bool(STOP_WORDS.search(text or "")) and len((text or "").split()) <= STOP_MAX_WORDS
+
+
+# words for the whole house: they beat "the robot you spoke to last"
+ROOM_WORDS = re.compile(r"\b(every(?:one|body)|guys|all of you|y'?all|you all)\b", re.IGNORECASE)
 _SOUND_NAME = re.compile(r"beep|chirp|tune|song|melody|sound|buzz|play_music")
 
 FLOOR_PROMPT = (
@@ -63,7 +67,10 @@ FLOOR_PROMPT = (
     "move it was asked to make while someone guides it) is not a finished task: "
     "that moment comes when the whole task is said to be done. A robot reporting "
     "it has done what a person asked (recorded it, found it, got there) is a "
-    "finished task, however it words it. When open is false, react must be null; only promises "
+    "finished task, however it words it. When said_to is everyone, the person "
+    "is talking to the whole house, and that is never small talk: pick the ONE "
+    "robot best placed to answer (the one it concerns most, else any); react is "
+    "null only for a sound or a word to nobody ('hmm', 'okay'). When open is false, react must be null; only promises "
     "count. Reply with JSON only: "
     '{"react": "<robot id>" | null, "also": ["<robot id>", ...], "why": "<a few words>"}'
 )
@@ -379,23 +386,40 @@ class House:
                 pass
 
     def hear(self, text: str, to: str | None = None, via: str = "house mic"):
-        """Who spoken words are for: named, else page, else last addressed."""
+        """Who spoken words are for: named, else page, else the whole room when
+        they say so ("everyone"), else last addressed, else the whole room."""
         from . import hearing as hearing_mod
 
         target = hearing_mod.addressed(text, self.residents())
         if target is None and to and self.resolve(to):
             target = self.resolve(to)
-        if target is None and self._last_addressed is not None:
+        if target is None and not ROOM_WORDS.search(text or "") \
+                and self._last_addressed is not None:
             rid, when = self._last_addressed
             if time.time() - when < 600 and rid in self.residents():
                 target = rid
         if target is None:
-            self.emit("unheard", "", text=text, via=via)
-            return None
+            self._to_room(text, via)
+            return "everyone"
         self._last_addressed = (target, time.time())
         self.emit("heard", target, text=text, frm=self.human, via=via)
         self.spawn(self._run_turn(target, text, "human"))
         return target
+
+    def _to_room(self, text: str, via: str) -> None:
+        """Words for nobody in particular: every robot hears them, and the floor
+        picks the one who answers (and anyone whose promise it is)."""
+        self._last_addressed = None
+        self.emit("heard", "", text=text, frm=self.human, via=via, to="everyone")
+        if is_stop(text):
+            self.spawn(self.stop_everything())
+            return
+        listeners = list(self.bodies)
+        self.room.append({"t": time.time(), "who": self.human, "to": "everyone", "text": text})
+        for rid in listeners:
+            self.soul(rid).hear(self.human, text[:300])
+        if listeners:
+            self.spawn(self._run_floor(self.human, text, listeners, True, 0, "everyone"))
 
     async def heard_audio(self, mic: str, audio: str, seconds: float,
                           to: str | None = None, push: bool = False) -> dict:

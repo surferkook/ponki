@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "bodies" / "sdk"))
 
 import ears_server as ears  # noqa: E402
 from hub import hearing as hearing_mod  # noqa: E402
+from hub import house as house_mod  # noqa: E402
 from hub.hearing import HearingError, addressed  # noqa: E402
 from mic_fixture import SentenceCutter  # noqa: E402
 from test_say import ScriptedProvider, make_house  # noqa: E402
@@ -82,9 +83,42 @@ class HearRouting(unittest.TestCase):
         self.house._last_addressed = ("buddy", time.time() - 60)
         self.assertEqual(self.hear("and again please"), "buddy")
         self.house._last_addressed = ("buddy", time.time() - 601)
-        self.assertIsNone(self.hear("and again please"))
-        unheard = [e for e in self.house.events if e["kind"] == "unheard"]
-        self.assertTrue(unheard)
+        self.assertEqual(self.hear("and again please"), "everyone")
+        heard = [e for e in self.house.events if e["kind"] == "heard"]
+        self.assertEqual(heard[-1]["to"], "everyone")
+
+    def test_room_words_beat_the_last_one_spoken_to(self) -> None:
+        self.house._last_addressed = ("buddy", time.time() - 60)
+        self.assertEqual(self.hear("it's not bedtime yet, everybody back up"), "everyone")
+        self.assertEqual(self.turns, [])
+        self.assertIsNone(self.house._last_addressed)
+
+    def test_everyone_hears_it_and_the_floor_picks_who_answers(self) -> None:
+        """Seen live: "oh you guys it's not bedtime yet … everybody back up" reached no one."""
+        for rid in ("eye", "buddy"):
+            self.house.bodies[rid] = house_mod.Link(ws=object(), manifest=self.house.manifests[rid], state={})
+        asked = []
+        self.house.provider.floor_handler = lambda request: (
+            asked.append(request) or '{"react": "buddy", "also": [], "why": "to the house"}')
+        answered = []
+
+        async def floor_turn(rid, speaker, text, depth, promised):
+            answered.append((rid, speaker))
+        self.house._floor_turn = floor_turn
+        self.hear("oh you guys it's not bedtime yet, everybody back up")
+        self.assertEqual(asked[0]["said_to"], "everyone")
+        self.assertEqual(answered, [("buddy", self.house.human)])
+        for rid in ("eye", "buddy"):
+            self.assertEqual(self.house.soul(rid)._heard[-1]["who"], self.house.human)
+
+    def test_a_stop_for_everyone_stops_everything(self) -> None:
+        stopped = []
+
+        async def stop_everything():
+            stopped.append(True)
+        self.house.stop_everything = stop_everything
+        self.hear("guys, stop!")
+        self.assertEqual(stopped, [True])
 
 
 class HeardAudio(unittest.TestCase):

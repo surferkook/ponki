@@ -189,6 +189,23 @@ table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1
   .hero h1{font-size:36px}
 }
 /* --CHUNK2-- */
+.facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;white-space:normal}
+.fact{font-size:12.5px;line-height:1.3;padding:4px 10px;border-radius:99px;background:var(--surface);
+  border:1px solid color-mix(in srgb,var(--rc,#888) 50%,var(--line))}
+.fact b{font-weight:700}
+.fact i{font-style:normal;color:var(--muted);margin-right:5px}
+.fact b+i,.fact i:last-child{margin:0 0 0 4px}
+.fact.miss{color:var(--muted);border-style:dashed;background:transparent}
+.fact.warn{border-style:dashed;border-color:color-mix(in srgb,#d39a2c 70%,var(--line))}
+details.told{margin-top:8px;white-space:normal}
+details.told summary{font-size:12.5px;color:var(--muted);cursor:pointer;list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.told summary::-webkit-details-marker{display:none}
+details.told summary::before{content:"▸";display:inline-block;transition:transform .15s}
+details.told[open] summary::before{transform:rotate(90deg)}
+details.told summary:hover{color:var(--ink)}
+.toldtext{margin-top:6px;padding:8px 11px;border-radius:10px;background:var(--surface);border:1px solid var(--line);
+  font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){details.told summary::before{transition:none}}
 .padrow{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:10px}
 .pad{display:grid;grid-template-columns:repeat(3,46px);grid-auto-rows:46px;gap:6px}
 .pad button{padding:0;font-size:18px;line-height:1}
@@ -282,10 +299,30 @@ function bubble(e,who,inner,robot,you){
 function line(e,text,bad,left){return `<div class="line ${bad?"bad":""} ${left?"left":""}" title="${esc(fullDate(e.t))}">${text}</div>`}
 function saves(e){if(!e.gif&&!e.video)return "";
   return `<div class="saves">${e.gif?`<a class="savegif" href="${esc(e.gif)}" download>Save GIF</a>`:""}${e.video?`<a class="savegif" href="${esc(e.video)}" download>Save video</a>`:""}</div>`}
+/* what a tool told a robot: the gist as chips, the whole text one click away */
+S.openTold=new Set();  // which "what it was told" sections are open, across feed re-renders
+document.addEventListener("toggle",ev=>{const d=ev.target; if(!d.dataset||!d.dataset.told)return;
+  d.open?S.openTold.add(d.dataset.told):S.openTold.delete(d.dataset.told)},true);
+function told(text,label,id){return text?`<details class="told" data-told="${esc(id??"")}"${S.openTold.has(String(id))?" open":""}><summary>${esc(label)}</summary><div class="toldtext">${esc(text)}</div></details>`:""}
+function locateFacts(e){
+  const found=Array.isArray(e.found)?{[e.what||""]:e.found}:(e.found||{}), chips=[];
+  for(const [w,items] of Object.entries(found))for(const f of items||[])
+    chips.push(`<span class="fact"><b>#${esc(f.n??"")}</b> ${esc(w)}${f.score!=null?` <i>${Math.round(f.score*100)}%</i>`:""}</span>`);
+  for(const w of String(e.what||"").split(",").map(s=>s.trim()).filter(Boolean))
+    if(!(found[w]||[]).length)chips.push(`<span class="fact miss">no ${esc(w)}</span>`);
+  const t=String(e.text||"");
+  for(const m of t.matchAll(/(?:^|\n)([^\n]+?) (?:drove from|hasn't driven)[^\n]*?it now faces ([^.\n]+)\./g))
+    chips.push(`<span class="fact nav"><i>facing</i>${esc(m[1])}: ${esc(m[2])}</span>`);
+  for(const m of t.matchAll(/To face the (.+?) \(#\d+\) from there, (.+?) would turn about (\d+)° to its (left|right)/g))
+    chips.push(`<span class="fact nav"><i>turn</i>${esc(m[2])}: ${m[3]}° ${m[4]} to the ${esc(m[1])}</span>`);
+  for(const m of t.matchAll(/Which way (.+?) faces isn't known yet/g))
+    chips.push(`<span class="fact warn"><i>facing</i>${esc(m[1])}: not known yet</span>`);
+  if(/so it can be 20° off/.test(t))chips.push(`<span class="fact warn"><i>facing</i>rough, from a short drive</span>`);
+  return chips.length?`<div class="facts">${chips.join("")}</div>`:""}
 function feedHTML(e,ctx){
   const r=byId(e.robot), n=r?disp(r):(e.robot||""), human=S.info?S.info.human:"you";
   switch(e.kind){
-    case "heard": return bubble(e,`${human}${ctx==="house"&&e.robot?" to "+n:""}${e.via?" · said out loud":""}`,esc(e.text),null,true);
+    case "heard": return bubble(e,`${human}${ctx==="house"&&e.robot?" to "+n:e.to==="everyone"?" to everyone":""}${e.via?" · said out loud":""}`,esc(e.text),null,true);
     case "unheard": return line(e,`Heard “${esc(e.text||"")}”, but not for anyone (no robot's name in it)`);
     case "say": {const to=e.to&&e.to!=="human"&&e.to!=="event"?byId(e.to):null;
       return bubble(e,to?`${n} to ${disp(to)}`:n,esc(e.text),r)}
@@ -298,13 +335,13 @@ function feedHTML(e,ctx){
     case "saw": return bubble(e,`${n} looked`,photoTag(e.image),r);
     case "locating": return line(e,`${esc(n)} is searching for “${esc(e.what||"")}”…`);
     case "located": {const c=Array.isArray(e.found)?e.found.length:Object.values(e.found||{}).reduce((a,v)=>a+(v||[]).length,0);
-      return bubble(e,`${n} ${c?`found ${c} ${esc(e.what||"")}${c>1?"s":""}`:`no ${esc(e.what||"")}`} · ${e.ms?Math.round(e.ms/100)/10+" s":""}`,
-        `${photoTag(e.image)}<div>${esc(e.text||"")}</div>`,r)}
+      return bubble(e,`${n} searched for ${esc(e.what||"")} · ${c?c+" found":"nothing found"} · ${e.ms?Math.round(e.ms/100)/10+" s":""}`,
+        `${photoTag(e.image)}${locateFacts(e)}${told(e.text,`What ${n} was told`,e.id)}`,r)}
     case "watching": return line(e,`${esc(n)} is watching “${esc(e.what||"")}” for ${esc(e.seconds||"")} s…`);
     case "watched": {let inner=photoTag(e.image);
       if(e.video)inner+=`<video src="${esc(e.video)}" controls muted loop playsinline preload="metadata" style="max-width:420px;width:100%;background:#000;border-radius:11px"></video>`;
       if(e.gif)inner+=`<img class="photo" src="${esc(e.gif)}" alt="" data-zoom="${esc(e.gif)}" style="max-width:300px;background:#fff">`;
-      inner+=saves(e);
+      inner+=saves(e)+told(e.text,`What ${n} was told`,e.id);
       return bubble(e,`${n} watched ${esc(e.what||"")} · ${e.moved?"it moved":"still"} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,inner,r)}
     case "drawing": return line(e,`${esc(n)} is drawing for ${esc(e.for||human)}: ${esc(e.what||"")}…`);
     case "drew": return bubble(e,`${n} drew this for ${esc(e.for||human)} · ${e.ms?Math.round(e.ms/1000)+" s":""}`,
