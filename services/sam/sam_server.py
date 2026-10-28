@@ -542,6 +542,10 @@ async def track(payload: dict):
         base = float(given[0])
         times = [float(t) - base for t in given]
         duration = times[-1] if times else duration  # real arrival times win
+        if len(times) > 1:
+            # over Wi-Fi the frames come late, then in a burst, but none are lost:
+            # spaced evenly over the real span, the clip plays smooth and true
+            times = [i * duration / (len(times) - 1) for i in range(len(times))]
 
     async def one(concept: str) -> list[dict]:
         text = await call_sam([
