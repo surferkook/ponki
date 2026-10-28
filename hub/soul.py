@@ -473,7 +473,10 @@ class Soul:
                                 "description": "1–3 English sentences: what's in it, the style "
                                                "(a crayon drawing, a cheerful cartoon, a simple "
                                                "diagram), colours and mood; words to appear in "
-                                               "it in quotes"},
+                                               "it in quotes. Drawing your housemates or the "
+                                               "house: name each one and say how it really "
+                                               "looks (from a photo if you have one), or the "
+                                               "illustrator invents strangers"},
                     "for": {"type": "string", "description": "who it's for, if anyone"}},
                    ["picture"])
         house_tool("look_up",
@@ -561,13 +564,18 @@ class Soul:
                 return self._promise_tool(call)
             if name == "ask_robot":
                 robot = str(args.get("robot", ""))
+                asked_at = time.time()
                 answer = await self.house.ask(self.id, robot,
                                               str(args.get("message", "")), chain + (self.id,))
                 msg = str(args.get("message", "")).lower()
                 if any(w in msg for w in _MOVE_WORDS):
                     self._view_fresh = False   # it moved: the photo is old now
+                photo = self.house.photo_since(self.house.resolve(robot) or robot, asked_at)
                 return ToolResult(call.id, f"{robot} replied (out loud — everyone in the "
-                                           f"room heard it): {answer}")
+                                           f"room heard it): {answer}"
+                                           + ("\n(It took this photo while answering you: "
+                                              "attached.)" if photo else ""),
+                                  image_b64=imaging.for_model(photo) if photo else None)
             if name == "locate":
                 result = await self.house.locate(self.id, str(args.get("what", "")))
             elif name == "watch":

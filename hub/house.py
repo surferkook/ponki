@@ -162,6 +162,7 @@ class House:
         # camera rid → {"points": every match of its last locate,
         #               "robots": {rid: {"at": (x, y), "t": seen at, "facing": (vx, vy) | None}}}
         self._sightings: dict[str, dict] = {}
+        self._last_photo: dict[str, tuple[float, str]] = {}  # rid → (when, the photo)
         self._voice_lock = asyncio.Lock()
         self._voice_spans: deque = deque(maxlen=20)
         self._last_addressed: tuple[str, float] | None = None
@@ -647,6 +648,7 @@ class House:
                 url = self.store_photo(rid, result["image"])
                 out["image_url"] = url
                 self.emit("saw", rid, image=url)
+                self._last_photo[rid] = (time.time(), result["image"])
         return out
 
     # -- house tools: locate, watch, draw, look_up (specs 03/05) ----------------------
@@ -948,6 +950,11 @@ class House:
                 if isinstance(data, dict):
                     fps.update(apilog.images_in(data.get("conversation")))
         return fps
+
+    def photo_since(self, rid: str, since: float) -> str | None:
+        """The photo a robot took after `since`, if any: a housemate that asked for it sees it."""
+        when, image = self._last_photo.get(rid, (0.0, ""))
+        return image if image and when >= since else None
 
     def store_photo(self, rid: str, image_b64: str) -> str:
         nums = self._photo_numbers(rid)
