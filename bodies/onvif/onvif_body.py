@@ -58,6 +58,9 @@ def move_units(pan_deg: float, tilt_deg: float, device: dict,
     return ux, uy
 
 
+OFFLINE_TEXT = "camera unreachable (switched off, or out of Wi-Fi)"
+
+
 def heading_text(position, device: dict) -> str:
     pan_range = float(device.get("pan_degrees") or 360)
     tilt_range = float(device.get("tilt_degrees") or 90)
@@ -446,13 +449,31 @@ class CameraRobot:
         data, shot = self.photo(fresh_after=settled)
         return data, shot, heading_text(pos, self.device)
 
+    async def check_reachable(self) -> bool:
+        """Ask the camera where it points: an answer means it is home, none
+        means it is switched off or off Wi-Fi, and the house counts it away."""
+        try:
+            pos = await asyncio.to_thread(self.position)
+        except Exception:
+            self.drop_session()  # log in afresh once it is back
+            if self.body is not None:
+                await self.body.set_state(heading=OFFLINE_TEXT, reachable=False)
+            return False
+        if self.body is not None:
+            await self.body.set_state(heading=heading_text(pos, self.device),
+                                      reachable=True)
+        return True
+
     async def settle_home_loop(self) -> None:
         home_after = float(self.device.get("home_after") or 90)
+        checked = 0.0
         while True:
             await asyncio.sleep(5)
             try:
-                if self.body is not None and not self.body.state.get("heading"):
-                    await self.report_heading()  # say where we point, once known
+                if time.monotonic() - checked >= 15:
+                    checked = time.monotonic()
+                    if not await self.check_reachable():
+                        continue
                 if self.stream is not None:
                     self.stream.maybe_close()
                 home = self.device.get("home")
