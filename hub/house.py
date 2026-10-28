@@ -756,6 +756,10 @@ class House:
                     notes.append(f"That facing comes from a short drive, so it can be 20° off: "
                                  f"keep {name}'s next drive to about 40 centimetres and look "
                                  f"again before the rest.")
+            elif (rid in spotted and rec["at"] and not any(kind == "drive" for kind, _ in since)
+                    and abs(spotted[rid][0] - rec["at"][0]) + abs(spotted[rid][1] - rec["at"][1]) > 0.25):
+                # somewhere else without driving: a hand carried it, and set it down any way round
+                rec["facing"] = None
             elif rec.get("facing") and not any(kind == "drive" for kind, _ in since):
                 turned = sum(a for kind, a in since if kind == "turn")
                 way = grounding._turned(*rec["facing"], turned) if abs(turned) >= 5 else rec["facing"]

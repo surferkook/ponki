@@ -208,6 +208,18 @@ class WhichWayItFaces(unittest.TestCase):
         self.assertIn("now faces to the left of your view", note)
         self.assertIn("about 40 centimetres", note)
 
+    def test_carried_somewhere_else_its_facing_is_forgotten(self):
+        """Live: after a take Vroom was carried back to the start and set down facing the camera; Keiki,
+        still picturing him facing up the table, sent him 10° right and 50 cm off the near edge."""
+        self.house.soul("rover").set_looks("car")
+        self.house._facing_note("eye", spot(car=[(0.56, 0.28)]), 100.0)
+        self.moved(150.0, ("drive", 50.0))
+        self.assertIn("now faces", self.house._facing_note("eye", spot(car=[(0.59, 0.12)]), 200.0))
+        note = self.house._facing_note("eye", spot(car=[(0.38, 0.78)], chess=[(0.59, 0.05)]), 300.0)
+        self.assertNotIn("hasn't driven since", note)
+        self.assertNotIn("would turn", note)
+        self.assertIn("isn't known yet", note)
+
     def test_nothing_drove_nothing_said(self):
         self.house._facing_note("eye", spot(car=[(0.44, 0.81)]), 100.0)
         self.assertEqual(self.house._facing_note("eye", spot(car=[(0.44, 0.81)]), 200.0), "")

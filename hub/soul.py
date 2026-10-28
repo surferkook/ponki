@@ -686,8 +686,11 @@ class Soul:
                             "conversation; otherwise react briefly the way a housemate "
                             "would, or reply with just (silence).)")
                 if promised:
-                    message += ("\n(The house thinks this may be the moment for one of "
-                                "your promises or habits:\n" + self._promise_list() + ")")
+                    message += ("\n(The house heard this as the moment for one of your "
+                                "promises or habits:\n" + self._promise_list() + "\nKeep it "
+                                "now, even if you kept it before: a promise counts every time "
+                                "its moment comes. Stay silent only if this plainly isn't "
+                                "what you promised.)")
             else:
                 message = f"[{source} says to you] {text}"
             conv.add_user(message)
