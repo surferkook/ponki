@@ -57,9 +57,30 @@ A Tapo-style ONVIF camera becomes a robot that looks, turns, and finds
 things. It needs a **Camera Account** (Tapo app → the camera → ⚙️ → Advanced
 Settings → Camera Account; on some firmware also Me → Tapo Lab → Third-Party
 Compatibility, and Privacy Mode off). The account lives only in the
-workshop's `data/secrets/`, never in the hub. The driver
+workshops' `data/secrets/`, never stored by the hub. The driver
 (`bodies/onvif/onvif_body.py <robot.json>`) runs on the Pi workshop; its
 Python deps are pinned in `bodies/onvif/requirements.txt`.
+
+**A stand-in for the camera.** The NUC's workshop also enables the camera
+family (`HOUSE_WORKSHOP_FAMILIES=robohon,onvif` in
+`ponkihouse-workshop-nuc`), with the same pins in the hub's venv:
+
+```bash
+.venv/bin/pip install -r bodies/onvif/requirements.txt
+```
+
+When the Pi leaves, the hub moves the camera to the NUC after a minute
+(`HOUSE_TAKEOVER_AFTER`, seconds; `HOUSE_TAKEOVER=off` turns it off). While
+both are home the Pi hands the NUC the Camera Account by itself. If the Pi
+went before it could, give it once on the NUC (typed, never echoed; it logs
+in to prove it works):
+
+```bash
+.venv/bin/python tools/stand_in.py keiki
+```
+
+When the Pi comes back, it sets its old copy aside and the camera stays on
+the NUC.
 
 Finding things (`locate` / `watch`) is done by SAM 3.1 on Meta's Model API,
 through a small local service on the NUC:

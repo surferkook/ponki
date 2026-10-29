@@ -1,5 +1,5 @@
 [Unit]
-Description=Ponkihouse workshop (NUC) — finds devices and runs robots (RoBoHoN only)
+Description=Ponkihouse workshop (NUC) — finds devices and runs robots (RoBoHoN, and stands in for cameras)
 After=network.target
 
 [Service]
@@ -10,7 +10,7 @@ ExecStart=@PONKI_DIR@/.venv/bin/python -u bodies/workshop/workshop.py
 Restart=on-failure
 RestartSec=2
 EnvironmentFile=@PONKI_DIR@/.env
-Environment=HOUSE_WORKSHOP_FAMILIES=robohon
+Environment=HOUSE_WORKSHOP_FAMILIES=robohon,onvif
 
 [Install]
 WantedBy=multi-user.target

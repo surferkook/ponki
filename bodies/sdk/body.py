@@ -122,6 +122,8 @@ class Body:
             m["personality"] = self.personality
         if self.kind:
             m["kind"] = self.kind
+        if os.environ.get("HOUSE_WORKSHOP"):
+            m["workshop"] = os.environ["HOUSE_WORKSHOP"]  # set by the workshop that started it
         return m
 
     # -- talking to the hub ------------------------------------------------

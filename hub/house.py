@@ -9,6 +9,7 @@ import asyncio
 import base64
 import inspect
 import json
+import os
 import re
 import shutil
 import time
@@ -24,9 +25,9 @@ from .soul import Soul
 FIXTURES = ("workshop", "speaker", "mic")
 ACT_TIMEOUT = 20.0
 MAX_ASK_DEPTH = 3
-SEEN_KEEP = 200
+SEEN_KEEP = int(os.environ.get("HOUSE_SEEN_KEEP") or 200)   # photos kept per robot
 VOICE_KEEP = 200
-EVENTS_KEEP = 1000
+EVENTS_KEEP = int(os.environ.get("HOUSE_EVENTS_KEEP") or 1000)   # events the hub (and so the UI) holds
 LISTENER_BACKLOG = 500
 # the room (spec 03)
 TURN_WAIT = 60.0
@@ -36,6 +37,10 @@ EXCHANGE_DEPTH = 10
 ROOM_KEEP = 12
 ASK_WAIT = 8.0
 PROMISE_WAIT = 60.0
+# a networked robot whose workshop has lost it moves to one that can reach it
+TAKEOVER = (os.environ.get("HOUSE_TAKEOVER") or "on").lower() not in ("off", "0", "no")
+TAKEOVER_AFTER = float(os.environ.get("HOUSE_TAKEOVER_AFTER") or 60)   # away this long first
+TAKEOVER_RETRY = 120.0
 WATCH_SECONDS = 12
 # a short "stop" from a person halts the whole house: "Guys, stop", "Keiki stop!", "stoppen"
 STOP_WORDS = re.compile(r"\b(stop|stopp?en|halt|freeze)\b", re.IGNORECASE)
@@ -163,6 +168,11 @@ class House:
         #               "robots": {rid: {"at": (x, y), "t": seen at, "facing": (vx, vy) | None}}}
         self._sightings: dict[str, dict] = {}
         self._last_photo: dict[str, tuple[float, str]] = {}  # rid → (when, the photo)
+        # standing in (a robot whose workshop lost it moves to one that can reach it)
+        self._away_since: dict[str, float] = {}
+        self._takeover_tried: dict[str, float] = {}
+        self._stuck_told: set[str] = set()
+        self._takeover_watch = False
         self._voice_lock = asyncio.Lock()
         self._voice_spans: deque = deque(maxlen=20)
         self._last_addressed: tuple[str, float] | None = None
@@ -178,8 +188,7 @@ class House:
                     self.events.append(json.loads(line))
                 except ValueError:
                     continue
-            path.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in self.events),
-                            encoding="utf-8")
+            # the file itself keeps every line: only memory holds the last EVENTS_KEEP
 
     @staticmethod
     def _max_on_disk(folder: Path, suffix: str) -> int:
@@ -311,8 +320,16 @@ class House:
                 self.spawn(self._tell_mics())
             if kind == "workshop":
                 self.spawn(self._adopt_from_workshop(rid))
+                if TAKEOVER and not self._takeover_watch:
+                    self._takeover_watch = True
+                    self.spawn(self._takeover_loop())
             return f"@{rid}"
 
+        moved = self.registry.get(rid) or {}
+        if moved.get("moved_from") and manifest.get("workshop") != moved.get("workshop"):
+            # an old copy, from the workshop it moved away from: one robot, one body
+            await self._close(ws, 4009)
+            raise ValueError(f"{rid} runs on {moved.get('workshop')} now")
         old = self.bodies.get(rid)
         if old is not None:
             self._fail_pending(old, "body reconnected")
@@ -362,6 +379,15 @@ class House:
                 rid = entry.get("name") or entry.get("id")
                 if not rid:
                     continue
+                record = self.registry.get(rid) or {}
+                if record.get("moved_from") and record.get("workshop") not in (None, wid):
+                    # it moved while this workshop was away: set the old copy aside, keep the move
+                    await self.act(f"@{wid}", "stop_robot", {"name": rid, "forget": True}, timeout=30)
+                    self.emit("fixture_note", "", text=f"{wid} set aside its old copy of "
+                              f"{self.label(rid)}: it runs on {record['workshop']} now")
+                    continue
+                if entry.get("reach") == "network" and isinstance(entry.get("config"), dict):
+                    _atomic_write(self._handover_path(rid), entry["config"])  # never an account
                 if entry.get("kind", "robot") == "robot" and rid not in self.manifests \
                         and self.registry.get(rid) is None:
                     continue  # not ours to record
@@ -371,8 +397,105 @@ class House:
                 if entry.get("device"):
                     fields["device"] = {"id": entry["device"]} if isinstance(entry["device"], str) else entry["device"]
                 self.registry.adopt(rid, **fields)
+            await self._share_accounts()
         except Exception:
             pass
+
+    # -- standing in: a robot whose workshop has lost it moves to one that can reach it --
+    def _handover_path(self, rid: str) -> Path:
+        return self.data_dir / "handover" / f"{rid}.json"
+
+    def robot_config(self, rid: str) -> dict | None:
+        """The config a stand-in workshop runs *rid* from: the last copy its workshop
+        sent (configs never hold accounts), else rebuilt from the record."""
+        saved = _load_json(self._handover_path(rid), None)
+        if isinstance(saved, dict) and saved.get("name") == rid:
+            return saved
+        record = self.registry.get(rid) or {}
+        if not record.get("family") or not isinstance(record.get("device"), dict):
+            return None
+        manifest = self.manifests.get(rid) or {}
+        return {"name": rid, "display_name": record.get("display_name") or rid,
+                "description": manifest.get("description", ""),
+                "family": record["family"], "device": record["device"]}
+
+    async def _takeover_loop(self) -> None:
+        while True:
+            await asyncio.sleep(15)
+            try:
+                await self.check_takeovers()
+            except Exception as exc:
+                self.emit("error", "", text=f"takeover check failed: {exc}")
+
+    async def check_takeovers(self, now: float | None = None) -> None:
+        now = time.time() if now is None else now
+        for record in self.registry.all(kind="robot"):
+            rid, owner = record["id"], record.get("workshop")
+            if record.get("runner") != "workshop" or not owner:
+                continue
+            if self.is_home(rid):
+                self._away_since.pop(rid, None)
+                self._stuck_told.discard(rid)
+                continue
+            since = self._away_since.setdefault(rid, now)
+            if now - since < TAKEOVER_AFTER or now - self._takeover_tried.get(rid, -TAKEOVER_RETRY) < TAKEOVER_RETRY:
+                continue
+            config = self.robot_config(rid)
+            if config is None:
+                continue
+            family = config.get("family")
+            others = [w for w, link in sorted(self.workshops.items())
+                      if w != owner and "adopt_robot" in (link.manifest.get("actions") or {})
+                      and family in ((link.state or {}).get("families") or [])]
+            if not others:
+                continue
+            self._takeover_tried[rid] = now
+            await self._move(rid, owner, config, others)
+
+    async def _move(self, rid: str, owner: str, config: dict, others: list[str]) -> bool:
+        reasons: list[str] = []
+        for wid in others:
+            result = await self.act(f"@{wid}", "adopt_robot", {"config": config}, timeout=60)
+            if not result.get("ok"):
+                reasons.append(f"{wid}: " + re.sub(r"^\w+Error: ", "", str(result.get("text"))))
+                continue
+            why = "couldn't reach it" if owner in self.workshops else "left the house"
+            if owner in self.workshops:  # still here, but lost it: its copy steps aside
+                await self.act(f"@{owner}", "stop_robot", {"name": rid, "forget": True}, timeout=30)
+            self.registry.upsert(rid, workshop=wid, moved_from=owner, moved_at=time.time())
+            self._away_since.pop(rid, None)
+            self._stuck_told.discard(rid)
+            self.emit("moved", rid, frm=owner, to=wid,
+                      text=f"{self.label(rid)} moved to {wid}: {owner} {why}")
+            return True
+        if reasons and rid not in self._stuck_told:  # once per time away, not every retry
+            self._stuck_told.add(rid)
+            self.emit("stuck", rid, text=f"no workshop can stand in for {self.label(rid)} yet: "
+                      + "; ".join(reasons))
+        return False
+
+    async def _share_accounts(self) -> None:
+        """Every workshop that could stand in for a networked robot keeps its account,
+        handed over workshop to workshop while both are here. The hub only relays it:
+        never stored, logged or shown to a model."""
+        for record in self.registry.all(kind="robot"):
+            rid, owner = record["id"], record.get("workshop")
+            config = _load_json(self._handover_path(rid), None)
+            if owner not in self.workshops or not isinstance(config, dict):
+                continue
+            for wid, link in sorted(self.workshops.items()):
+                if wid == owner or config.get("family") not in ((link.state or {}).get("families") or []) \
+                        or "take_account" not in (link.manifest.get("actions") or {}):
+                    continue
+                ready = await self.act(f"@{wid}", "can_run", {"config": config}, timeout=15)
+                if not isinstance(ready.get("data"), dict) or ready["data"].get("missing") != "account":
+                    continue
+                shared = await self.act(f"@{owner}", "share_account", {"name": rid}, timeout=15)
+                secret = shared.get("data") if shared.get("ok") else None
+                if isinstance(secret, dict) and secret:
+                    await self.act(f"@{wid}", "take_account", {"config": config, "secret": secret},
+                                   timeout=15)
+                    self.emit("fixture_note", "", text=f"{wid} can now stand in for {self.label(rid)}")
 
     # -- hearing (spec 06) ---------------------------------------------------------
     def house_mic(self) -> str | None:
@@ -1031,18 +1154,32 @@ class House:
         if fp:
             apilog.unregister(fp)
         prefix = f"/api/robots/{rid}/seen/{n}."
-        kept: deque = deque(maxlen=EVENTS_KEEP)
-        for event in self.events:
+
+        def unlinked(event: dict) -> dict:
             event = dict(event)
             for field_name in ("image", "gif", "video"):
                 value = event.get(field_name)
                 if isinstance(value, str) and value.startswith(prefix):
                     event[field_name] = None
                     event["photo_deleted"] = True
-            kept.append(event)
-        self.events = kept
-        (self.data_dir / "events.jsonl").write_text(
-            "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in self.events), encoding="utf-8")
+            return event
+
+        self.events = deque((unlinked(e) for e in self.events), maxlen=EVENTS_KEEP)
+        # the whole log on disk, not just the last EVENTS_KEEP: a deleted photo loses no history
+        path = self.data_dir / "events.jsonl"
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
+        out: list[str] = []
+        for line in lines:
+            try:
+                out.append(json.dumps(unlinked(json.loads(line)), ensure_ascii=False))
+            except (ValueError, TypeError, AttributeError):
+                out.append(line)
+        tmp = path.with_suffix(".jsonl.tmp")
+        tmp.write_text("".join(f"{line}\n" for line in out), encoding="utf-8")
+        tmp.replace(path)
         apilog.write({"t": time.time(), "kind": "photo_deleted",
                       "photo": f"{rid} #{n}", "files": files, "conversations": conversations})
         self.emit("photo_deleted", rid, n=n, prefix=prefix)

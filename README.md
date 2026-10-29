@@ -118,7 +118,7 @@ flowchart LR
   subgraph nuc ["NUC: the house"]
     hub["hub :8200<br/>souls · room · builder · web UI"]
     side["sam :8201 · voice :8202 · ears :8203"]
-    wsn["workshop<br/>robohon family"]
+    wsn["workshop<br/>robohon · onvif (stand-in)"]
   end
   subgraph pi ["Raspberry Pi 4: a workshop"]
     wsp["workshop<br/>pins · onvif · mbot2 · mic"]
@@ -132,13 +132,32 @@ flowchart LR
   spk -- "dials out (ws)" --> hub
   wsp -- "USB serial" --> uno["Arduino Uno<br/>Buddy"]
   wsp -- "ONVIF + RTSP" --> tapo["Tapo C225<br/>Keiki"]
+  wsn -. "stands in when the Pi has gone" .-> tapo
   rover["mBot2<br/>Vroom-Vroom"] -- "Wi-Fi, dials in" --> wsp
   spk -- "Bluetooth" --> jbl["JBL speaker<br/>the house voice"]
   wsn -- "HTTP" --> rh["RoBoHoN's own server"] --- robo["RoBoHoN"]
 ```
 
 Every body dials out to the hub, so no robot opens a port. A device's own secrets (a camera's login, a rover's
-Wi-Fi) stay on the workshop that uses it and never reach the hub, a prompt or a log.
+Wi-Fi) live on the workshops that use it and are never stored by the hub, put in a prompt or logged.
+
+### When a workshop leaves
+
+Machines come and go: the Pi goes on a trip, a laptop shuts its lid. The house re-forms around whoever is left.
+
+- **A robot on the network can move.** A family says so (`REACH = "network"`): today, the camera. When its workshop
+  has been gone a minute, or is still here but has lost the device, the hub asks the other workshops to stand in,
+  and the first one that reaches it and holds its account runs it from then on. Same robot, same soul, same
+  photos; the feed says "Keiki moved to the NUC: the Pi left the house".
+- **One robot, one body.** The record names the workshop that runs it. An old copy dialling in from the workshop it
+  left is refused, and that workshop sets its copy aside when it returns. The robot stays where it moved to.
+- **Accounts travel workshop to workshop.** While both are here, the hub hands a networked robot's account to
+  every workshop that could stand in for it, relaying it in memory only. If the one that held it has already
+  gone, `python tools/stand_in.py <robot>` on the stand-in takes it once from the keyboard.
+- **A robot on a cable waits for its machine.** Buddy is wired to the Pi, so he is away while the Pi is away, and
+  comes back by himself when it does. The rover's program is flashed with the Pi's address, so it waits too.
+- **The brain doesn't move.** Souls, the record and SAM live with the hub. If the hub goes, the workshops keep
+  dialling until it is back.
 
 ## How a moment happens
 
@@ -226,8 +245,9 @@ needs your approval on the build sheet.
 ## Safe by design
 
 - **Private network only.** The hub listens on the LAN and the tailnet; every body presents the house token.
-- **Secrets never reach a model.** Device accounts are typed into a form, stored on the workshop (mode 0600)
-  and kept out of the hub, prompts and logs.
+- **Secrets never reach a model.** Device accounts are typed into a form, stored on the workshops that run or
+  can stand in for the device (mode 0600), and passed between workshops only through the hub's memory: never
+  stored by the hub, never in a prompt or a log.
 - **A robot can only do what its body declares.** No shell, no free-form device access.
 - **Unknown code is fenced.** Builder-written families are read off the syntax tree, run sandboxed and
   approved by a person.
@@ -243,6 +263,7 @@ Where Ponki stops today:
 - **Guiding is approximate.** The rover usually ends up within 10–20 cm of the goal. Its distance sensor sees
   only what's straight ahead, not what's beside it.
 - **One person per house.** The robots know one human by name (`HOUSE_HUMAN`).
+- **Only networked robots move.** A robot on a cable waits for its machine, and the hub itself has no stand-in.
 - **Thinking needs the cloud.** Souls, finding and the builder run on Meta's Model API. The house voice runs
   locally, and hearing falls back to a local Whisper.
 
@@ -257,6 +278,7 @@ bodies/<family>/    each family's driver
 firmware/pins/      the one generic Arduino sketch
 services/           sam (SAM 3.1), voice (Kokoro + Piper), ears (Muse Voice Transcribe)
 deploy/             systemd units and a clone-anywhere installer
+tools/              manual checks and helpers: the voice check, giving a stand-in workshop an account
 tests/              standard library only: no hardware, no network, no model calls
 ```
 

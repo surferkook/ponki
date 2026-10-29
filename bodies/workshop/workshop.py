@@ -220,6 +220,7 @@ def _spawn(name: str):
         argv = ["systemd-cat", "-t", f"ponkihouse-{name}"] + argv
     full_env = dict(os.environ)
     full_env.update({str(k): str(v) for k, v in (env or {}).items()})
+    full_env["HOUSE_WORKSHOP"] = workshop_name()  # the hub knows who runs it
     proc = subprocess.Popen(argv, env=full_env, cwd=str(_REPO))
     with _lock:
         _children[name] = {"proc": proc, "started": time.time(),
@@ -375,6 +376,36 @@ def scan_devices(fresh: bool = False) -> list:
     return out
 
 
+# -- standing in for another workshop ----------------------------------------------
+
+def reach_of(ref) -> str:
+    """"network" when any workshop that reaches the device may run it, else "attached"."""
+    try:
+        return "network" if getattr(family_for(ref), "REACH", None) == "network" \
+            else "attached"
+    except Exception:
+        return "attached"
+
+
+def ready_to_stand_in(config: dict) -> tuple:
+    """("", "") when this workshop could run *config* now, else (what's missing, why)."""
+    name = str(config.get("name") or "")
+    ref = str(config.get("family") or "pins")
+    if not NAME_RE.match(name):
+        return "name", f"robot names must match ^[a-z][a-z0-9_-]{{0,31}}$, got {name!r}"
+    if ref not in enabled_families():
+        return "family", f"this workshop doesn't run the {ref} family"
+    if reach_of(ref) != "network":
+        return "cable", f"{name}'s device is on a cable to its own machine"
+    fam = family_for(ref)
+    device = config.get("device") or {}
+    path = str(_config_path(name))
+    if not fam.export_secret(device, path):
+        return "account", f"{name}'s account isn't on this workshop"
+    why = fam.ready_here(device, path)
+    return ("reach", why) if why else ("", "")
+
+
 # -- small helpers for the actions ----------------------------------------------
 
 def _run_check_sync(fam, device, config, check_id) -> dict:
@@ -433,9 +464,12 @@ def build_body() -> Body:
             raise ValueError(
                 f"a robot ({owner}) is running on that device: stop it first")
         fam = family_for(family)
+        kwargs = {}
+        if "config_path" in inspect.signature(fam.connect).parameters:
+            kwargs["config_path"] = str(_config_path("_"))  # its secret lands in our secrets
 
         def work():
-            result = fam.connect(device, fields or {})
+            result = fam.connect(device, fields or {}, **kwargs)
             if inspect.isawaitable(result):
                 result = asyncio.run(result)
             return result
@@ -546,6 +580,45 @@ def build_body() -> Body:
         await asyncio.to_thread(_spawn, name)
         return "configured"
 
+    @body.action("can_run", "Could this workshop run this robot right now?",
+                 {"config": {"type": "object"}})
+    async def can_run(config: dict | None = None):
+        missing, why = await asyncio.to_thread(ready_to_stand_in, dict(config or {}))
+        return {"ready": not missing, "missing": missing, "why": why}
+
+    @body.action("adopt_robot", "Take over a robot its own workshop lost.",
+                 {"config": {"type": "object"}})
+    async def adopt_robot(config: dict | None = None):
+        config = dict(config or {})
+        missing, why = await asyncio.to_thread(ready_to_stand_in, config)
+        if missing:
+            raise ValueError(why)
+        return await start_robot(config)
+
+    @body.action("share_account", "Hand over a networked robot's account, for a stand-in.",
+                 {"name": {"type": "string"}})
+    async def share_account(name: str = ""):
+        config = _read_config(name)
+        if config is None:
+            raise ValueError(f"no robot called {name!r}")
+        ref = config.get("family") or "pins"
+        if reach_of(ref) != "network":
+            raise ValueError("only a networked robot's account travels")
+        return family_for(ref).export_secret(config.get("device") or {},
+                                             str(_config_path(name))) or {}
+
+    @body.action("take_account", "Keep a networked robot's account, to stand in for it.",
+                 {"config": {"type": "object"}, "secret": {"type": "object"}})
+    async def take_account(config: dict | None = None, secret: dict | None = None):
+        config = dict(config or {})
+        name, ref = str(config.get("name") or ""), str(config.get("family") or "pins")
+        if not NAME_RE.match(name) or ref not in enabled_families() \
+                or reach_of(ref) != "network":
+            raise ValueError("this workshop can't stand in for that robot")
+        family_for(ref).import_secret(config.get("device") or {},
+                                      str(_config_path(name)), dict(secret or {}))
+        return "kept"
+
     @body.action("restore_robot", "Bring back a set-aside robot.",
                  {"name": {"type": "string"}})
     async def restore_robot(name: str = ""):
@@ -645,10 +718,14 @@ def build_body() -> Body:
                 record = _children.get(name)
             if record is not None and _alive(record):
                 started = record.get("started")
+            reach = reach_of(ref)
             out.append({
                 "name": name,
                 "device": config.get("device"),
                 "family": ref,
+                "reach": reach,
+                # a networked robot's config (never its account) travels, so a stand-in can run it
+                **({"config": config} if reach == "network" else {}),
                 "kind": kind,
                 "display_name": config.get("display_name") or name,
                 "running": name in running,

@@ -385,6 +385,8 @@ function feedHTML(e,ctx){
     case "came_back": return line(e,`${esc(e.display_name||n)} came back home`);
     case "removed": return line(e,`${esc(n)} was taken out of the house`);
     case "photo_deleted": return line(e,`${esc(n)}'s photo #${esc(e.n)} was deleted`);
+    case "moved": return line(e,`${esc(n)} moved to ${esc(e.to||"")}: ${esc(e.frm||"")} ${esc((e.text||"").split(": ").pop())}`);
+    case "stuck": case "fixture_note": return line(e,esc(e.text||""));
     default: return "";
   }
 }

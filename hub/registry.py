@@ -12,7 +12,8 @@ from pathlib import Path
 PROTOCOL = 1
 
 KNOWN_FIELDS = ("id", "display_name", "kind", "family", "device", "workshop",
-                "runner", "build", "protocol", "created", "updated")
+                "runner", "build", "protocol", "created", "updated",
+                "moved_from", "moved_at")
 
 
 def _atomic_write(path: Path, obj: object) -> None:

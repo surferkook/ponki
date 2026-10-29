@@ -37,6 +37,12 @@ CLAIMS_PORTS : optional True
     Optional. Omit it normally; set it to ``True`` (the only allowed
     value when present) when the family claims serial/USB ports and the
     workshop must scan it first.
+REACH : optional "network"
+    Optional. Omit it for a device on a cable to one machine (it can
+    only run there). ``"network"`` (the only allowed value when present)
+    means any workshop that reaches the device and holds its account can
+    run it, so the house can move it when its workshop leaves (see the
+    stand-in hooks below).
 EXAMPLE : dict
     ``{"device", "plan"}`` -- an example device dict and an example plan
     dict the builder side must handle without problems. Conformance runs
@@ -92,6 +98,18 @@ update(device) -> (text, device) [optional]
     ``update(device) -> (text, device)`` is optional: when present it
     refreshes the device in place and returns ``(text, device)``.
     Conformance does not check this hook.
+
+Stand-in hooks [optional, for ``REACH = "network"``]
+--------------------------------------------------
+ready_here(device, config_path) -> str
+    ``""`` when this workshop could run the device right now, else why
+    not in plain words (no account here, can't reach it).
+export_secret(device, config_path) -> dict
+    The device's account as stored on this workshop (``{}`` if none),
+    for handing to a stand-in workshop. The hub relays it in memory and
+    never stores, logs or prompts with it.
+import_secret(device, config_path, secret) -> None
+    Store an account handed over by another workshop.
 
 Registry
 --------

@@ -95,6 +95,13 @@ def _check_constants(fam, problems: list[str]) -> None:
     if hasattr(fam, "CLAIMS_PORTS") and fam.CLAIMS_PORTS is not True:
         problems.append(
             f"CLAIMS_PORTS must be True when present, got {fam.CLAIMS_PORTS!r}")
+    # REACH is optional; when present it must be "network", with the stand-in hooks.
+    if hasattr(fam, "REACH"):
+        if fam.REACH != "network":
+            problems.append(f'REACH must be "network" when present, got {fam.REACH!r}')
+        for hook in ("ready_here", "export_secret", "import_secret"):
+            if not callable(getattr(fam, hook, None)):
+                problems.append(f'REACH = "network" needs the {hook} hook')
     if not missing("PLAN_PARAMS"):
         params = fam.PLAN_PARAMS
         if not isinstance(params, dict):

@@ -8,8 +8,10 @@ The contract is spec 09's; hooks mirror the pins family's shape.
 from __future__ import annotations
 
 import asyncio
+import socket
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "onvif"))
@@ -25,6 +27,8 @@ NAME = "onvif"
 TITLE = "IP camera"
 SCAN = "cameras on the network"
 FIXTURE = None
+# on the Wi-Fi, not on a cable: any workshop that reaches it and holds its account can run it
+REACH = "network"
 CONNECT = {
     "label": "Connect the camera",
     "hint": "It needs a Camera Account: Tapo app → the camera → ⚙️ → Advanced "
@@ -162,6 +166,29 @@ def connect(device: dict, fields: dict, config_path=None):
                     {"username": username, "password": password})
     kind = "it has a pan/tilt head" if camera.has_ptz else "fixed, no pan/tilt"
     return (f"logged in to the {name} ({kind})", built)
+
+
+def ready_here(device: dict, config_path) -> str:
+    """"" when this workshop could run the camera right now, else why not."""
+    if not load_secret(Path(config_path), device.get("id", "")).get("username"):
+        return "its camera account isn't on this workshop"
+    host = device.get("host") or ""
+    port = urllib.parse.urlparse(device.get("xaddr") or "").port or 80
+    try:
+        socket.create_connection((host, port), timeout=3).close()
+    except OSError:
+        return f"can't reach the camera at {host or 'no address'}"
+    return ""
+
+
+def export_secret(device: dict, config_path) -> dict:
+    return load_secret(Path(config_path), device.get("id", ""))
+
+
+def import_secret(device: dict, config_path, secret: dict) -> None:
+    if secret.get("username") and secret.get("password"):
+        save_secret(Path(config_path), device.get("id", ""),
+                    {"username": secret["username"], "password": secret["password"]})
 
 
 def setup(config: dict, device: dict) -> dict:
