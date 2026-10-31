@@ -156,18 +156,26 @@ jobs:
 
           \`\`\`bash
           git clone --branch $TAG https://github.com/$REPO.git && cd ponki
-          cp .env.example .env          # put your key in META_API_KEY
-          docker compose up             # pulls the images below; add --build to build from source
+          cp .env.example .env                       # put your key in META_API_KEY
+          echo "PONKI_VERSION=${TAG#v}" >> .env      # use this release's images
+          docker compose pull && docker compose up
           \`\`\`
 
           Open http://localhost:8200. Pip, the desk camera, already lives there, and a desk lamp is
-          waiting in Add a robot. Hear the robots with \`docker compose --profile voice up\`.
+          waiting in Add a robot. To hear the robots: \`docker compose --profile voice pull\`, then
+          \`docker compose --profile voice up\`. To build from source instead of pulling,
+          \`docker compose up --build\`.
 
           ## Images (linux/amd64 and linux/arm64)
 
           - \`ghcr.io/$OWNER/ponki:${TAG#v}\`: hub, finding (SAM 3.1), workshop
           - \`ghcr.io/$OWNER/ponki-voice:${TAG#v}\`: the house voice (Kokoro-82M, Apache 2.0)
 
+          Both carry build provenance and an SBOM.
+
+          ## How it got here
+
+          Every step is in the history: https://github.com/$REPO/commits/$TAG
           EOF
           # v1.0.0-rc.1 and the like are rehearsals: a pre-release, never "latest"
           pre=""; case "$TAG" in *-*) pre="--prerelease";; esac
@@ -175,5 +183,5 @@ jobs:
             gh release edit "$TAG" --repo "$REPO" --notes-file notes.md $pre
           else
             gh release create "$TAG" --repo "$REPO" --title "Ponki $TAG" \
-              --notes-file notes.md --generate-notes --verify-tag $pre
+              --notes-file notes.md --verify-tag $pre
           fi
