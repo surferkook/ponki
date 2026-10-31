@@ -43,7 +43,7 @@ def new_key() -> str:
     return _secrets.token_hex(8)
 
 
-def my_address(towards: str = "192.168.1.1") -> str:
+def my_address(towards: str = "192.0.2.1") -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect((towards, 9))

@@ -182,7 +182,7 @@ class SimulatedBoard(unittest.TestCase):
 
 class Render(unittest.TestCase):
     def test_render_all_settings(self) -> None:
-        out = render("Home Net", 'p"a\\ss', "192.168.1.37", 8221, "0123456789abcdef")
+        out = render("Home Net", 'p"a\\ss', "192.0.2.37", 8221, "0123456789abcdef")
         text = out.decode()
         self.assertIn(json.dumps("Home Net"), text)
         self.assertIn(json.dumps('p"a\\ss'), text)

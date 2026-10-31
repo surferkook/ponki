@@ -102,12 +102,12 @@ class DiscoveryParsing(unittest.TestCase):
         <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
           xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery">
         <s:Body><d:ProbeMatches><d:ProbeMatch>
-          <a:XAddrs xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing">http://10.0.0.9/onvif/device_service http://192.168.1.39:2020/onvif/device_service</a:XAddrs>
+          <a:XAddrs xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing">http://198.51.100.9/onvif/device_service http://192.0.2.39:2020/onvif/device_service</a:XAddrs>
           <d:Scopes>onvif://www.onvif.org/name/Tapo%20C225 onvif://www.onvif.org/hardware/C225</d:Scopes>
         </d:ProbeMatch></d:ProbeMatches></s:Body></s:Envelope>"""
-        found = parse_probe_matches(raw, sender="192.168.1.39")
-        self.assertEqual(found[0]["host"], "192.168.1.39")
-        self.assertIn("192.168.1.39", found[0]["xaddr"])
+        found = parse_probe_matches(raw, sender="192.0.2.39")
+        self.assertEqual(found[0]["host"], "192.0.2.39")
+        self.assertIn("192.0.2.39", found[0]["xaddr"])
         self.assertEqual(found[0]["name"], "Tapo C225")
 
     def test_tapo_model_from_reverse_name(self) -> None:

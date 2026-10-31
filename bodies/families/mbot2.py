@@ -48,9 +48,9 @@ EXAMPLE = {
                "port": "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
                "usb": "1-1.1", "mac": "ECE3342F1308", "firmware": "44.01.013",
                "battery": 100, "where": "ttyUSB0 (USB)",
-               "program": "house-rover 2", "host": "192.168.1.37",
+               "program": "house-rover 2", "host": "192.0.2.37",
                "rover_port": 8220, "ready": True,
-               "status": "on the Wi-Fi (192.168.1.60) · battery 100%"},
+               "status": "on the Wi-Fi (192.0.2.60) · battery 100%"},
     "plan": {"name": "Vroom-Vroom",
              "description": "A small Makeblock mBot2 rover with encoder "
                             "motors, a colour screen, five LEDs, a speaker, "

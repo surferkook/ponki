@@ -212,7 +212,7 @@ Renaming, moving on and coming back change the record, not five files by hand. A
   "display_name": "Keiki",           // renaming changes only this
   "kind": "robot",                   // or "workshop", "speaker", "mic"
   "family": "onvif",
-  "device": {"id": "onvif:192.168.1.39", "name": "TP-Link Tapo C225", "pan_degrees": 328, "tilt_degrees": 96},
+  "device": {"id": "onvif:192.0.2.39", "name": "TP-Link Tapo C225", "pan_degrees": 328, "tilt_degrees": 96},
   "workshop": "ponki-pi-workshop", "runner": "workshop", "protocol": 1
 }
 ```

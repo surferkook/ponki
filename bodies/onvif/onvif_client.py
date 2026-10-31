@@ -5,7 +5,7 @@ moves for a Tapo-style IP camera. Responses are read by local tag name,
 ignoring namespaces, because cameras disagree about prefixes.
 
 Run standalone to probe a camera (never prints the password or stream URL):
-    python onvif_client.py 192.168.1.39 <username> <password>
+    python onvif_client.py 192.0.2.39 <username> <password>
 """
 from __future__ import annotations
 
