@@ -169,9 +169,11 @@ jobs:
           - \`ghcr.io/$OWNER/ponki-voice:${TAG#v}\`: the house voice (Kokoro-82M, Apache 2.0)
 
           EOF
+          # v1.0.0-rc.1 and the like are rehearsals: a pre-release, never "latest"
+          pre=""; case "$TAG" in *-*) pre="--prerelease";; esac
           if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
-            gh release edit "$TAG" --repo "$REPO" --notes-file notes.md
+            gh release edit "$TAG" --repo "$REPO" --notes-file notes.md $pre
           else
             gh release create "$TAG" --repo "$REPO" --title "Ponki $TAG" \
-              --notes-file notes.md --generate-notes --verify-tag
+              --notes-file notes.md --generate-notes --verify-tag $pre
           fi
