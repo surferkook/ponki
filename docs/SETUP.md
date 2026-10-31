@@ -4,9 +4,6 @@ How to run each part of the house on your own machines: the hub, the voice and
 ears, the camera and its finding service, the pins firmware, and the systemd
 services. The [README](../README.md) has the overview.
 
-> No UI login yet: the hub is LAN + tailnet only (ufw 192.0.2.0/24). Do not
-> expose port 8200 to the internet.
-
 ## With Docker
 
 `docker compose up --build` runs the hub, the finding service and a workshop

@@ -54,6 +54,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 .welcome{margin:18px 0 6px}.welcome.bad{border-color:var(--bad)}.welcome h2{margin:0 0 6px}
 .welcome ol{margin:10px 0 4px;padding-left:20px;display:grid;gap:9px}.welcome li button{margin-left:6px;padding:2px 12px;font-size:13px}
 .welcome code{font-size:12.5px}
+.welcome .voiceoff{color:var(--bad);margin:10px 0 0}
+.sys{max-width:860px}.sys>h2{margin:30px 0 8px}.sys>.hero+h2{margin-top:6px}.sys>p.hint{margin:0 0 10px}
+.sys h3.sub{font-size:15px;margin:22px 0 10px}
+.sysgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.sysgrid.wide{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.syscard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0}
+.syscard .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.syscard .top h3{margin:0 auto 0 0;font-size:17px}
+.syscard p{margin:0}.sys .mono{font-size:12px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.spill{font-size:11px;font-weight:600;line-height:1;padding:4px 8px;border-radius:99px;white-space:nowrap;
+  background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
+.spill.ok{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.spill.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.namerow{display:flex;gap:8px;flex-wrap:nowrap}.namerow input{flex:1;min-width:0}
+.runs{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:14px}
+.linkish{font-weight:600;color:var(--ink)}
+.settings{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.settings>div{background:var(--surface);display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px}
+.settings small{display:block;color:var(--muted);font-size:13px}.settings select{font-weight:600}
+.logbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.logbar select{max-width:100%}
 .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;
   background:color-mix(in srgb,var(--me) 16%,var(--surface));border:1px solid var(--line)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
@@ -285,7 +305,7 @@ function renderSidebar(){
     const st=isHome(r)?["home",...shown.map(readable)].join(", "):r.online?["away",...shown.map(readable)].join(", "):"away";
     h+=`<button class="row ${S.sel===r.name?"sel":""}" data-sel="${esc(r.name)}"><span class="pres ${isHome(r)?"on":"off"}" title="${isHome(r)?"home":"away"}">${faceHTML(r,44)}</span><span class="tx"><span class="nm">${esc(disp(r))}</span><br><span class="st">${esc(st)}</span></span></button>`}
   h+=`<button class="row ${S.sel==="add"?"sel":""}" data-sel="add"><span class="disc dash">+</span><span class="tx"><span class="nm">Add a robot</span><br><span class="st">${unfinished?"Building "+esc(unfinished.name||"a robot")+"…":won?won+" workshop"+(won>1?"s":"")+" ready":"No workshop online"}</span></span></button>`;
-  h+=`<button class="row ${S.sel==="system"?"sel":""}" data-sel="system"><span class="disc" aria-hidden="true">⚙</span><span class="tx"><span class="nm">System</span><br><span class="st">${sysBad?sysBad+" things need a look":"All running"}</span></span></button>`;
+  h+=`<button class="row ${S.sel==="system"?"sel":""}" data-sel="system"><span class="disc" aria-hidden="true">⚙</span><span class="tx"><span class="nm">System</span><br><span class="st">${sysBad?sysBad+(sysBad>1?" things need a look":" thing needs a look"):"All running"}</span></span></button>`;
   if(S.departed.length){h+=`<div class="sidehead">Moved on</div>`;
     const seen=new Set();
     for(const e of S.departed){if(seen.has(e.name))continue;seen.add(e.name);
@@ -470,9 +490,13 @@ function welcomeHTML(){
   }
   steps.push(`<li><strong>Look under the hood.</strong> Each robot's Stats tab shows what it spends;
     System → Logs → API calls shows every call to Muse and SAM. ${go("system","System")}</li>`);
+  const quiet=S.system&&S.system.services&&S.system.services.voice&&S.system.services.voice.off;
   return h+`<div class="card welcome"><h2>Welcome to Ponki</h2>
     <p class="hint">A home for robot souls. Every robot has a mind of its own (Muse Spark), finds things with SAM 3.1,
-    and gets things done by talking to the others.</p><ol>${steps.join("")}</ol>
+    and gets things done by talking to the others.</p>
+    ${quiet?`<p class="voiceoff">The robots talk in text only: the house voice isn't running. To hear them, start Ponki with
+    <code>docker compose --profile voice up --build</code>, then switch on <strong>Hear it here</strong> in the sidebar.</p>`:""}
+    <ol>${steps.join("")}</ol>
     <p><button class="quiet" id="welcomed">Got it, hide this</button></p></div>`;
 }
 function wireWelcome(){
@@ -944,45 +968,51 @@ function wireBuild(s){
 function viewSystem(){
   document.documentElement.style.setProperty("--me","#1b2340");
   const sys=S.system||{services:{},workshops:[],equipment:[]};
-  const svc=(id,title,desc,extra)=>{const s=(sys.services||{})[id]||{};
-    return `<div class="card"><h2>${title} <span class="pill ${s.ready?"good":s.off?"":"bad"}">${s.ready?"running":s.off?"off":"needs attention"}</span></h2>
-    <p class="hint">${desc}</p><p class="mono">${esc(extra||(s.off?offNote[id]:"")||s.detail||s.model||"")}</p></div>`};
-  const offNote={voice:"Not part of this house: robots without a speaker talk in text. With Docker: docker compose --profile voice up",
-    ears:"Not part of this house: type to the robots instead of holding to talk."};
-  let h=`<div class="wrap"><div class="hero">${houseFace(72)}<div><h1>System</h1>
-    <p class="hint">The house's own machinery: its services, the workshops on each machine, and the equipment. Nothing here has a soul.</p></div></div><h2>Ponki</h2>`;
-  h+=svc("hub","The hub","The house itself: souls, the record, the builder, the web UI.",
-    sys.hub?`${sys.hub.provider} · ${sys.hub.model} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString()} · ${sys.hub.robots} robots`:"");
-  // hub is served implicitly: mark running when system loaded
-  h=h.replace('needs attention','running');
-  h+=svc("voice","Voice","Speaks for robots without a speaker of their own (Kokoro, Piper).");
-  h+=svc("ears","Ears","Turns what the house mic hears into text.");
-  h+=svc("finding","Finding","“Where exactly is X?” for robots with a camera.");
-  h+=`<div class="card"><h2>House settings</h2>
-    <p>Robots chat <span class="hint">A robot may react to what another one says out loud.</span>
-    <button class="switch" data-setting="chatter">${S.settings.chatter?"on":"off"}</button></p>
-    <p>Always listening <span class="hint">Experimental: the house mic hears everything said in the room.</span>
-    <button class="switch" data-setting="always_on" ${S.mic&&S.mic.house_mic?"":"disabled"}>${S.settings.always_on?"on":"off"}</button></p>
-    <p>House mic <span class="hint">The mic behind the hold-to-talk button.</span>
-    <select id="micselect"><option value="">none online</option>${(S.mic.mics||[]).map(m=>
-      `<option ${S.settings.mic===m?"selected":""}>${esc(m)}</option>`).join("")}</select></p></div>`;
-  h+=`<h2>Workshops</h2><p class="hint">The house's hands on each machine: they find devices, connect and check them, and run them.</p>`;
-  for(const w of sys.workshops||S.workshops){h+=`<div class="card"><h2>${esc(w.display_name||w.id)}
-    <span class="pill ${w.online?"good":"bad"}">${w.online?"online":"offline"}</span></h2>
-    <form class="composer" data-wrename="${esc(w.id)}"><input type="text" value="${esc(w.display_name||w.id)}"><button class="quiet">Rename</button></form>
-    <p class="mono">id ${esc(w.id)} · families: ${esc((w.families||[]).join(", ")||"—")}</p>
-    ${(w.runs||[]).length?w.runs.map(r=>`<p><a href="#" data-gorobot="${esc(r.id)}">${esc(r.display_name||r.id)}</a>
-      <span class="hint">${esc(r.kind||"robot")} · ${esc(r.family||"")} · ${r.online?"running":"not running"}</span></p>`).join("")
-      :`<p class="hint">Runs nothing yet.</p>`}</div>`}
-  h+=`<h2>Equipment</h2><p class="hint">Mics and speakers: house equipment, no soul. Equipment added through Add a robot can be removed here.</p>`;
-  for(const eq of sys.equipment||[]){h+=`<div class="card"><h2>${esc(eq.display_name||eq.id)}
-    ${S.settings.mic===eq.id?`<span class="pill">house mic</span>`:""} <span class="pill ${eq.online?"good":"bad"}">${eq.online?"online":"offline"}</span></h2>
-    <form class="composer" data-erename="${esc(eq.key||eq.id)}"><input type="text" value="${esc(eq.display_name||eq.id)}"><button class="quiet">Rename</button></form>
-    <p class="mono">id ${esc(eq.id)} · ${esc(eq.kind||"")} · ${eq.record&&eq.record.runner==="workshop"?"added through Add a robot":"its own service"}</p>
-    ${eq.record&&eq.record.runner==="workshop"?`<button class="danger" data-removeeq="${esc(eq.key||eq.id)}">Remove</button>`:""}
-    <span class="hint bad" data-eqmsg></span></div>`}
-  h+=`<div class="card"><h2>Logs</h2><p class="hint">What happened, as the house and each machine wrote it down: newest at the bottom.</p>
-    <div class="composer"><select id="logsrc">
+  const pill=(ok,text,off)=>`<span class="spill ${ok?"ok":off?"":"bad"}">${esc(text)}</span>`;
+  const offNote={voice:"Not in this house: robots without a speaker talk in text. With Docker, add it with docker compose --profile voice up.",
+    ears:"Not in this house: type to the robots instead of holding to talk."};
+  const svc=(id,title,desc)=>{const s=(sys.services||{})[id]||{};
+    const detail=s.off?offNote[id]:(s.detail||(s.model?(id==="ears"?"model ":"")+s.model:""));
+    return `<div class="syscard"><div class="top"><h3>${title}</h3>${pill(s.ready,s.ready?"running":s.off?"off":"needs attention",s.off)}</div>
+      <p class="hint">${desc}</p>${detail?`<p class="mono">${esc(detail)}</p>`:""}</div>`};
+  const nameForm=(attr,key,value)=>`<form class="namerow" ${attr}="${esc(key)}"><input type="text" value="${esc(value)}" aria-label="Name" maxlength="40"><button class="quiet">Rename</button></form>`;
+  const mics=(S.mic&&S.mic.mics)||[];
+  let h=`<div class="wrap sys"><div class="hero"><div><h1>System</h1>
+    <p class="hint">The house's own machinery: its services, the workshops on each machine, and the equipment. Nothing here has a soul.</p></div></div>
+    <h2>Ponki</h2><div class="sysgrid">
+    <div class="syscard"><div class="top"><h3>The hub</h3>${pill(true,"running")}</div>
+      <p class="hint">The house itself: souls, the record, the builder, the web UI.</p>
+      ${sys.hub?`<p class="mono">${esc(sys.hub.provider)} · ${esc(sys.hub.model)} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} · ${sys.hub.robots} robots</p>`:""}</div>
+    ${svc("voice","Voice","Speaks for robots without a speaker of their own (Kokoro, Piper).")}
+    ${svc("ears","Ears","Turns what the house mic hears into text.")}
+    ${svc("finding","Finding","“Where exactly is X?” for robots with a camera.")}</div>
+    <h3 class="sub">House settings</h3><div class="settings">
+      <div><span>Robots chat<small>A robot may react to what another one says out loud.</small></span>
+        <button class="switch" data-setting="chatter">${S.settings.chatter?"on":"off"}</button></div>
+      <div><span>House mic<small>The mic behind the hold-to-talk button.</small></span>${mics.length
+        ?`<select id="micselect" aria-label="House mic"><option value="">none</option>${mics.map(m=>`<option ${S.settings.mic===m?"selected":""}>${esc(m)}</option>`).join("")}</select>`
+        :`<b>none online</b>`}</div>
+      <div><span>Always listening<small>Experimental: the house mic hears everything said in the room.</small></span>
+        <button class="switch" data-setting="always_on" ${S.mic&&S.mic.house_mic?"":"disabled"}>${S.settings.always_on?"on":"off"}</button></div>
+    </div>
+    <h2>Workshops</h2><p class="hint">The house's hands on each machine: they find devices, connect and check them, and run them.</p>
+    <div class="sysgrid wide">${(sys.workshops||[]).map(w=>`<div class="syscard">
+      <div class="top"><h3>${esc(w.display_name||w.id)}</h3>${pill(w.online,w.online?"online":"offline")}</div>
+      ${nameForm("data-wrename",w.id,w.display_name||w.id)}
+      <p class="mono">id ${esc(w.id)} · families: ${esc((w.families||[]).join(", ")||"–")}</p>
+      ${(w.runs||[]).length?`<ul class="runs">${w.runs.map(r=>`<li>${r.kind==="robot"||!r.kind
+        ?`<a href="#" class="linkish" data-gorobot="${esc(r.id)}">${esc(r.display_name||r.id)}</a>`:`<b>${esc(r.display_name||r.id)}</b>`}
+        <span class="hint">${esc(r.kind||"robot")} · ${esc(r.family||"")} · ${r.online?"running":"not running"}</span></li>`).join("")}</ul>`
+        :`<p class="hint">Runs nothing yet.</p>`}</div>`).join("")||`<p class="hint">No workshop has joined yet.</p>`}</div>
+    <h2>Equipment</h2><p class="hint">Mics and speakers: house equipment, no soul. Equipment added through Add a robot can be removed here.</p>
+    <div class="sysgrid wide">${(sys.equipment||[]).map(eq=>`<div class="syscard">
+      <div class="top"><h3>${esc(eq.display_name||eq.id)}</h3>${S.settings.mic===eq.id?pill(true,"house mic"):""}${pill(eq.online,eq.online?"online":"offline")}</div>
+      ${nameForm("data-erename",eq.key||eq.id,eq.display_name||eq.id)}
+      <p class="mono">id ${esc(eq.id)} · ${esc(eq.kind||"")} · ${eq.record&&eq.record.runner==="workshop"?"added through Add a robot":"its own service"}</p>
+      ${eq.record&&eq.record.runner==="workshop"?`<div><button class="danger" data-removeeq="${esc(eq.key||eq.id)}">Remove</button></div>`:""}
+      <span class="hint bad" data-eqmsg></span></div>`).join("")||`<p class="hint">No mics or speakers yet.</p>`}</div>
+    <h2>Logs</h2><p class="hint">What happened, as the house and each machine wrote it down: newest at the bottom.</p>
+    <div class="logbar"><select id="logsrc" aria-label="Which log">
       <optgroup label="The house"><option value="events">House events (everything)</option>
       <option value="api">API calls (Muse, SAM): what left the house</option></optgroup>
       ${(sys.workshops||[]).filter(w=>w.online).map(w=>`<option value="workshop:${esc(w.id)}">the workshop itself · ${esc(w.id)}</option>`).join("")}

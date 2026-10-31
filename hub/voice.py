@@ -94,6 +94,9 @@ async def synth(text: str, v: dict) -> tuple[bytes, int]:
                 "text": text, "voice": cleaned["id"],
                 "speed": cleaned["speed"], "pitch": cleaned["pitch"]})
     except httpx.HTTPError as exc:
+        if _optional():
+            raise VoiceError("the house voice isn't running: start Ponki with "
+                             "docker compose --profile voice up to hear the robots")
         raise VoiceError(f"the house voice isn't reachable ({type(exc).__name__})")
     if resp.status_code >= 400:
         try:
@@ -108,6 +111,11 @@ async def synth(text: str, v: dict) -> tuple[bytes, int]:
     return resp.content, ms
 
 
+def _optional() -> bool:
+    """A house where the voice is an extra (Docker: --profile voice)."""
+    return os.environ.get("HOUSE_VOICE_OPTIONAL", "").lower() in ("1", "on", "yes", "true")
+
+
 async def health() -> dict:
     if VOICE_URL.strip().lower() in ("", "off"):
         return {"state": "off", "error": None}  # this house has none
@@ -117,6 +125,6 @@ async def health() -> dict:
         data = resp.json()
         return {"state": data.get("state", "error"), "error": data.get("error")}
     except Exception:
-        if os.environ.get("HOUSE_VOICE_OPTIONAL", "").lower() in ("1", "on", "yes", "true"):
+        if _optional():
             return {"state": "off", "error": None}  # an optional service, not started
         return {"state": "down", "error": "not running"}
