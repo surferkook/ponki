@@ -4,16 +4,19 @@
 # Raspberry Pi, Graviton), each checked by tools/smoke.py the way a
 # newcomer would meet it.
 #
-# With a META_API_KEY repository secret, pushes to main, tags and manual
-# runs also do one real Pip turn (Muse Spark + SAM 3.1): a few cents.
-# Pull requests never see the secret and run everything else.
+# Release tags and manual runs (Actions → CI → Run workflow) also do one
+# real Pip turn with the META_API_KEY repository secret (Muse Spark +
+# SAM 3.1, a few cents). Everything else runs without a key. Changes that
+# touch only docs don't start a run.
 name: CI
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*"]          # path filters never apply to tags
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   workflow_dispatch:
 
 permissions:
@@ -70,14 +73,14 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     env:
-      E2E: ${{ github.event_name != 'pull_request' && secrets.META_API_KEY != '' }}
+      E2E: ${{ (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && secrets.META_API_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: A newcomer's .env
         env:
-          META_API_KEY: ${{ github.event_name != 'pull_request' && secrets.META_API_KEY || '' }}
+          META_API_KEY: ${{ (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && secrets.META_API_KEY || '' }}
         run: |
           cp .env.example .env
           if [ -n "$META_API_KEY" ]; then
