@@ -93,7 +93,7 @@ jobs:
       - name: Build (hub, finding, workshop, voice)
         run: docker compose --profile voice build
       - name: Image sizes
-        run: docker images --format '{{.Repository}}:{{.Tag}}  {{.Size}}' | grep ponki
+        run: docker images --format '{{.Repository}}:{{.Tag}}  {{.Size}}' | grep ghcr.io/surferkook
       - name: First start, without the voice
         run: |
           docker compose up -d

@@ -16,7 +16,7 @@ name: ponki
 
 x-ponki: &ponki
   build: .
-  image: ponki:local
+  image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-latest}
   env_file: .env                  # cp .env.example .env first
   restart: unless-stopped
 
@@ -65,7 +65,7 @@ services:
   voice:
     profiles: [voice]
     build: services/voice
-    image: ponki-voice:local
+    image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-latest}
     restart: unless-stopped
 
 volumes:

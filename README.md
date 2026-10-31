@@ -1,5 +1,6 @@
 <h1 align="center">Ponki</h1>
 <p align="center"><b>A home for robot souls.</b></p>
+<p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, and Ponki in a box on amd64 and arm64"></a></p>
 
 <!-- TODO before submitting: add docs/media/hero.jpg and the demo link, then uncomment
 <p align="center">
