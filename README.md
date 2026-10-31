@@ -295,9 +295,6 @@ cp .env.example .env          # put your key in META_API_KEY, and your first nam
 docker compose up --build     # the first build takes a few minutes
 ```
 
-On a fresh Mac, open Docker Desktop once and finish its setup before using `docker` in a terminal. If the command
-isn't found, choose **System** under Settings → Advanced (or add `~/.docker/bin` to your PATH) and open a new terminal.
-
 Open **http://localhost:8200**. The house already has someone in it:
 
 1. **Meet Pip**, a camera on a virtual desk. Open Pip, and on the Talk tab ask *"Hi Pip! Can you find the orange
