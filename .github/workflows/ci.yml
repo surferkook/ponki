@@ -1,0 +1,122 @@
+# CI: the tests on every Python we support, then Ponki in a box built and
+# started from scratch on both CPU families people run Docker on: amd64
+# (Intel/AMD PCs, Intel Macs, most servers) and arm64 (Apple silicon Macs,
+# Raspberry Pi, Graviton), each checked by tools/smoke.py the way a
+# newcomer would meet it.
+#
+# With a META_API_KEY repository secret, pushes to main, tags and manual
+# runs also do one real Pip turn (Muse Spark + SAM 3.1): a few cents.
+# Pull requests never see the secret and run everything else.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            services/sam/requirements.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20.20.2"
+      - name: Install
+        run: |
+          pip install -r requirements.txt -r services/sam/requirements.txt
+          npm ci --prefix services/sam/js --omit=dev --no-audit --no-fund
+      - name: Unit tests (no hardware, network or model calls)
+        run: python -m unittest discover -s tests
+      - name: Every family meets the family contract
+        working-directory: bodies
+        run: python -m families.conformance
+
+  docker:
+    name: Docker (${{ matrix.arch }})
+    needs: tests
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      E2E: ${{ github.event_name != 'pull_request' && secrets.META_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: A newcomer's .env
+        env:
+          META_API_KEY: ${{ github.event_name != 'pull_request' && secrets.META_API_KEY || '' }}
+        run: |
+          cp .env.example .env
+          if [ -n "$META_API_KEY" ]; then
+            python3 - <<'EOF'
+          import os, re
+          text = open(".env").read()
+          text = re.sub(r"^META_API_KEY=.*$", lambda _: "META_API_KEY=" + os.environ["META_API_KEY"], text, flags=re.M)
+          open(".env", "w").write(text)
+          EOF
+          fi
+          docker version --format 'docker {{.Server.Version}} on {{.Server.Arch}}'
+          docker compose version
+      - name: Build (hub, finding, workshop, voice)
+        run: docker compose --profile voice build
+      - name: Image sizes
+        run: docker images --format '{{.Repository}}:{{.Tag}}  {{.Size}}' | grep ponki
+      - name: First start, without the voice
+        run: |
+          docker compose up -d
+          python3 tools/smoke.py --wait 180 $([ "$E2E" = true ] && echo --e2e)
+      - name: Add the voice
+        run: |
+          docker compose --profile voice up -d
+          python3 tools/smoke.py --wait 180 --voice
+      - name: A restart keeps the house and doesn't seed it again
+        run: |
+          docker compose restart hub workshop
+          python3 tools/smoke.py --wait 180 --voice
+          test "$(docker compose logs hub workshop | grep -c 'seeded /data')" -eq 2
+      - name: Logs
+        if: always()
+        run: docker compose --profile voice logs --no-color --timestamps > compose.log; tail -n 200 compose.log
+      - name: Keep the logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-logs-${{ matrix.arch }}
+          path: compose.log
+          retention-days: 7
+      - name: Clean up
+        if: always()
+        run: docker compose --profile voice down -v
