@@ -86,7 +86,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          name: digests-${{ matrix.arch }}.${{ matrix.image }}   # *.ponki never matches *.ponki-voice
           path: digests/*
           retention-days: 1
 
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: digests
-          pattern: digests-${{ matrix.image }}-*
+          pattern: digests-*.${{ matrix.image }}
           merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
