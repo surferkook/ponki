@@ -411,7 +411,7 @@ class ButtonPart(Part):
 
     def __init__(self, *args) -> None:
         super().__init__(*args)
-        self._last_tell = 0.0
+        self._last_tell = float("-inf")
 
     def setup(self) -> None:
         self.pins.mode(self.pin["signal"], "pullup")
@@ -431,7 +431,7 @@ class ButtonPart(Part):
 
     def self_test(self):
         presses, previous, deadline = 0, 1, time.monotonic() + self.LISTEN
-        last = 0.0
+        last = float("-inf")
         while time.monotonic() < deadline:
             value = self.pins.read(self.pin["signal"])
             now = time.monotonic()
@@ -456,7 +456,7 @@ class LightSensorPart(Part):
     def __init__(self, *args) -> None:
         super().__init__(*args)
         self._prev = None
-        self._last_report = 0.0
+        self._last_report = float("-inf")  # never; monotonic time starts at boot
 
     def setup(self) -> None:
         self.pins.mode(self.pin["signal"], "analog")

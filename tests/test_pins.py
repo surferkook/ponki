@@ -123,6 +123,20 @@ class SuddenLight(unittest.TestCase):
         self.assertEqual(len(told), 1)  # 300→140 sudden; 900→600 is not
         self.assertIn("suddenly went dark", told[0])
 
+    def test_sudden_right_after_boot(self) -> None:
+        # monotonic time starts at boot: a board on a machine that booted a
+        # few seconds ago must still report its first sudden change
+        from unittest import mock
+        told: list = []
+        sensor = self._sensor(told)
+
+        async def run():
+            await sensor.on_reading({"light_level": 300, "room_is": "dim"})
+            await sensor.on_reading({"light_level": 140, "room_is": "dark"})
+        with mock.patch.object(parts_lib.time, "monotonic", return_value=5.0):
+            asyncio.run(run())
+        self.assertEqual(len(told), 1)
+
     def test_small_move_is_not_sudden(self) -> None:
         told: list = []
         sensor = self._sensor(told)
