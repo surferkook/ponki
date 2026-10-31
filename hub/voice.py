@@ -34,6 +34,11 @@ VOICES: list[dict] = [
     {"id": "en_US-ryan-medium", "label": "Ryan (Piper): clear, friendly man",
      "description": "clear, friendly man"},
 ]
+# HOUSE_VOICES (comma list) narrows the catalogue to what the voice service
+# has, e.g. af_heart,am_puck in the Docker image (Kokoro only).
+_ONLY = [v.strip() for v in os.environ.get("HOUSE_VOICES", "").split(",") if v.strip()]
+if _ONLY:
+    VOICES = [v for v in VOICES if v["id"] in _ONLY] or VOICES
 _IDS = {v["id"] for v in VOICES}
 # voices a soul may still carry from before the ids took their service names
 _LEGACY = {"heart": "af_heart", "bella": "af_bella", "nicole": "af_nicole",
@@ -81,6 +86,8 @@ def default_for(name: str) -> dict:
 async def synth(text: str, v: dict) -> tuple[bytes, int]:
     """(WAV bytes, duration ms) from the voice service."""
     cleaned = clean(v) or default_for("house")
+    if VOICE_URL.strip().lower() in ("", "off"):
+        raise VoiceError("this house has no voice service")
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(f"{VOICE_URL}/speak", json={
@@ -102,10 +109,14 @@ async def synth(text: str, v: dict) -> tuple[bytes, int]:
 
 
 async def health() -> dict:
+    if VOICE_URL.strip().lower() in ("", "off"):
+        return {"state": "off", "error": None}  # this house has none
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             resp = await client.get(f"{VOICE_URL}/health")
         data = resp.json()
         return {"state": data.get("state", "error"), "error": data.get("error")}
     except Exception:
+        if os.environ.get("HOUSE_VOICE_OPTIONAL", "").lower() in ("1", "on", "yes", "true"):
+            return {"state": "off", "error": None}  # an optional service, not started
         return {"state": "down", "error": "not running"}

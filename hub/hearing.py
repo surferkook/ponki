@@ -34,6 +34,8 @@ async def transcribe(audio_b64: str, keywords: list[str] | None = None) -> dict:
 
 
 async def health() -> dict:
+    if EARS_URL.strip().lower() in ("", "off"):
+        return {"state": "off", "error": None}  # this house has none
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             resp = await client.get(f"{EARS_URL}/health")

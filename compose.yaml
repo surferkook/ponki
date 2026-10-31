@@ -1,0 +1,73 @@
+# Ponki in a box.
+#
+#   cp .env.example .env              # put your META_API_KEY in it
+#   docker compose up --build         # then open http://localhost:8200
+#
+# You get the hub, the finding service (SAM 3.1) and a workshop with a
+# virtual desk: Pip the desk camera already lives here, and a desk lamp is
+# waiting in Add a robot. Add the house voice (Kokoro, two voices):
+#
+#   docker compose --profile voice up --build
+#
+# Everything the house remembers is in two volumes; `docker compose down -v`
+# forgets it all and the next start is a first run again.
+
+name: ponki
+
+x-ponki: &ponki
+  build: .
+  image: ponki:local
+  env_file: .env                  # cp .env.example .env first
+  restart: unless-stopped
+
+services:
+  hub:
+    <<: *ponki
+    command: ["uvicorn", "hub.main:app", "--host", "0.0.0.0", "--port", "8200"]
+    ports:
+      - "127.0.0.1:8200:8200"     # this machine only: the web UI has no login
+    environment:
+      HOUSE_TOKEN: ${HOUSE_TOKEN:-ponki-in-a-box}
+      HOUSE_DATA_DIR: /data/hub
+      PONKI_SEED: /ponki/demo/hub
+      PONKI_SEED_INTO: /data/hub
+      HOUSE_SAM_URL: http://sam:8201
+      HOUSE_VOICE_URL: http://voice:8202
+      HOUSE_VOICE_OPTIONAL: "on"
+      HOUSE_VOICES: af_heart,am_puck
+      HOUSE_EARS_URL: "off"
+    volumes:
+      - hub:/data/hub
+
+  sam:
+    <<: *ponki
+    working_dir: /ponki/services/sam
+    command: ["uvicorn", "sam_server:app", "--host", "0.0.0.0", "--port", "8201"]
+
+  workshop:
+    <<: *ponki
+    command: ["python", "-u", "bodies/workshop/workshop.py"]
+    depends_on: [hub]
+    environment:
+      HOUSE_TOKEN: ${HOUSE_TOKEN:-ponki-in-a-box}
+      HOUSE_HUB: ws://hub:8200
+      HOUSE_WORKSHOP_NAME: desk-workshop
+      HOUSE_WORKSHOP_FAMILIES: desk
+      HOUSE_DESK: "on"
+      HOUSE_DESK_DIR: /data/workshop/desk
+      HOUSE_WORKSHOP_ROBOTS: /data/workshop/robots
+      HOUSE_WORKSHOP_SECRETS: /data/workshop/secrets
+      PONKI_SEED: /ponki/demo/workshop
+      PONKI_SEED_INTO: /data/workshop
+    volumes:
+      - workshop:/data/workshop
+
+  voice:
+    profiles: [voice]
+    build: services/voice
+    image: ponki-voice:local
+    restart: unless-stopped
+
+volumes:
+  hub:
+  workshop:

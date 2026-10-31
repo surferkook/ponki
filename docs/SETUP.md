@@ -7,6 +7,27 @@ services. The [README](../README.md) has the overview.
 > No UI login yet: the hub is LAN + tailnet only (ufw 192.0.2.0/24). Do not
 > expose port 8200 to the internet.
 
+## With Docker
+
+`docker compose up --build` runs the hub, the finding service and a workshop
+with the virtual desk, and starts the house with Pip in it (see the README).
+What compose sets up, and where:
+
+| Service | What it is | Settings that matter |
+|---|---|---|
+| `hub` | the house, on http://localhost:8200 (this machine only) | `META_API_KEY`, `HOUSE_HUMAN`, `HOUSE_TOKEN` from `.env` |
+| `sam` | finding (SAM 3.1), reached by the hub as `http://sam:8201` | `META_API_KEY` |
+| `workshop` | a workshop named `desk-workshop` with only the virtual desk | `HOUSE_DESK=on`, `HOUSE_WORKSHOP_FAMILIES=desk` |
+| `voice` | `--profile voice`: Kokoro with two voices, Heart and Puck | `HOUSE_VOICES=af_heart,am_puck` |
+
+The house's memory lives in two volumes, `ponki_hub` and `ponki_workshop`. On the
+first start the entrypoint copies `demo/hub` and `demo/workshop` into them once.
+Ears are off: a container has no house mic, so you type to the robots.
+
+To let workshops on other machines join a containerised hub, publish the port
+beyond this machine (`"8200:8200"` in `compose.yaml`) and set a long random
+`HOUSE_TOKEN`. There is no login, so keep it on your LAN or tailnet.
+
 ## Run the hub (Step 1)
 
 ```bash
@@ -30,6 +51,12 @@ actions run from the Body tab.
 Robots without a speaker speak through the house voice (Kokoro + Piper,
 all 48 kHz), and the house hears people through a mic fixture and the ears
 (Muse Voice Transcribe, with faster-whisper offline as fallback).
+
+`HOUSE_VOICES` (a comma list, set for both the hub and the voice service)
+narrows the nine voices to the ones you have, for example
+`af_heart,am_puck` without the Piper models. The Piper voices are for your
+own use: their training data is licensed non-commercially, so they are
+downloaded, never shipped.
 
 ```bash
 python3 -m venv services/voice/.venv

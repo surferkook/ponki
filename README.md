@@ -88,7 +88,7 @@ flowchart TB
   L4["4 · PROTOCOL<br/>manifest + actions + state + input · the body SDK<br/>the one contract with every body"]
   L3["3 · WORKSHOP<br/>find · connect · check · run and supervise drivers<br/>one per machine"]
   RULE{{"▲ generic: nothing above this line knows what device it's talking to ▲"}}
-  L2["2 · FAMILY<br/>pins: any Arduino · onvif: any IP camera · mbot2 · robohon · mic<br/>the only device-specific code"]
+  L2["2 · FAMILY<br/>pins: any Arduino · onvif: any IP camera · mbot2 · robohon · mic · desk: a virtual desk<br/>the only device-specific code"]
   L1["1 · DEVICE<br/>Uno + our firmware · Tapo C225 · mBot2 + our rover program · RoBoHoN · USB mic<br/>left as it is, or given a small program of ours"]
   L6 ~~~ L5 ~~~ L4 ~~~ L3 ~~~ RULE ~~~ L2 ~~~ L1
   classDef house fill:#dfe6f8,stroke:#2b56c6,stroke-width:1.5px,color:#18242a
@@ -272,32 +272,82 @@ Where Ponki stops today:
 ```
 hub/                the house: FastAPI app, souls, room and floor, builder, grounding, web UI (one file, no build step)
 bodies/sdk/         the body SDK: decorate a function and it becomes an action
-bodies/families/    the family contract, its conformance check and the five families
+bodies/families/    the family contract, its conformance check and the six families
 bodies/workshop/    the workshop fixture, drafting and the sandbox
-bodies/<family>/    each family's driver
+bodies/<family>/    each family's driver (bodies/desk: the virtual desk)
+demo/               the house a first run starts with: Pip and its workshop config
 firmware/pins/      the one generic Arduino sketch
 services/           sam (SAM 3.1), voice (Kokoro + Piper), ears (Muse Voice Transcribe)
-deploy/             systemd units and a clone-anywhere installer
+deploy/             systemd units, a clone-anywhere installer and the container's entrypoint
+compose.yaml        Ponki in a box: hub, finding, a workshop with the virtual desk, optional voice
 tools/              manual checks and helpers: the voice check, giving a stand-in workshop an account
 tests/              standard library only: no hardware, no network, no model calls
 ```
 
-## Run it
+## Try it
+
+All you need is Docker (Docker Desktop on a Mac, Apple silicon or Intel; Docker Engine with the Compose plugin on
+Linux) and a Meta Model API key.
+
+```bash
+git clone https://github.com/surferkook/ponki.git && cd ponki
+cp .env.example .env          # put your key in META_API_KEY, and your first name in HOUSE_HUMAN
+docker compose up --build     # the first build takes a few minutes
+```
+
+Open **http://localhost:8200**. The house already has someone in it:
+
+1. **Meet Pip**, a camera on a virtual desk. Open Pip, and on the Talk tab ask *"Hi Pip! Can you find the orange
+   and the rubber duck?"* Pip looks, finds them with SAM 3.1, and turns to search when something isn't in view.
+2. **Add a robot.** A virtual desk lamp is waiting in the workshop. The builder (Muse Wonder) walks you through
+   finding it, checking it and giving it a soul: a persona, a portrait and a voice.
+3. **Watch them work together.** Ask Pip *"Ask the lamp to glow blue, then check with your own eyes."* Pip asks the
+   lamp, the lamp changes colour, and Pip takes a photo to make sure.
+4. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
+   call to Muse and SAM.
+
+To hear the robots, add the house voice (Kokoro, two voices, about 2 GB more to build) and switch on **Hear it here**
+in the sidebar:
+
+```bash
+docker compose --profile voice up --build
+```
+
+`docker compose down -v` forgets everything, and the next start is a first run again.
+
+The virtual desk exists so you can try the house without hardware. Real devices need a workshop on the machine
+they're plugged into; see [Run it on your own machines](#run-it-on-your-own-machines).
+
+## Run it on your own machines
+
+Without Docker, on Python 3.10 or 3.11:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env          # set HOUSE_TOKEN and META_API_KEY
+cp .env.example .env          # set META_API_KEY and HOUSE_TOKEN
 .venv/bin/uvicorn hub.main:app --host 0.0.0.0 --port 8200
+```
 
-# in another shell: a fake robot dials in
+Open http://localhost:8200/. Then, in another shell, a workshop finds devices and runs them. This one finds the
+virtual desk:
+
+```bash
+HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> HOUSE_WORKSHOP_FAMILIES=desk HOUSE_DESK=on \
+  .venv/bin/python bodies/workshop/workshop.py
+```
+
+Use **Add a robot** to give the desk camera or the lamp a soul. Without `HOUSE_WORKSHOP_FAMILIES` and `HOUSE_DESK`,
+a workshop looks for real devices: Arduinos on USB, cameras and RoBoHoN on the network, the rover. The finding
+service (SAM 3.1), the voice, the ears, each family's setup and the systemd units are in [docs/SETUP.md](docs/SETUP.md).
+
+The smallest body is a fake robot that dials in by itself, with no workshop:
+
+```bash
 HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/sdk/example.py
 ```
 
-Open http://localhost:8200/. The fake robot appears on the board; talk to it, or fire its actions from the Body tab.
-The voice, ears, finding service, workshops and each device are set up in [docs/SETUP.md](docs/SETUP.md).
-
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 202 tests, about 35 s
+.venv/bin/python -m unittest discover -s tests    # 221 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built

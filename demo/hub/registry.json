@@ -1,0 +1,23 @@
+{
+ "version": 1,
+ "robots": {
+  "pip": {
+   "id": "pip",
+   "kind": "robot",
+   "created": 1793479984.0012,
+   "family": "desk",
+   "display_name": "Pip",
+   "device": {
+    "id": "desk:camera",
+    "name": "Desk camera (virtual)",
+    "part": "camera",
+    "body": "A small camera on a pan head, looking at a desk from the front: a window and a plant on the left, books, a blue mug and an orange in the middle, a desk lamp and a rubber duck on the right. It can look and turn 40° each way. It has no speaker of its own: it speaks through the house.",
+    "family": "desk"
+   },
+   "workshop": "desk-workshop",
+   "runner": "workshop",
+   "updated": 1793479984.1166677,
+   "protocol": 1
+  }
+ }
+}

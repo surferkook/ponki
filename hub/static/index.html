@@ -51,6 +51,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 .hint{font-size:13px;color:var(--muted)}
 .bad{color:var(--bad)} .good{color:var(--good)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:16px;margin:0 0 14px}
+.welcome{margin:18px 0 6px}.welcome.bad{border-color:var(--bad)}.welcome h2{margin:0 0 6px}
+.welcome ol{margin:10px 0 4px;padding-left:20px;display:grid;gap:9px}.welcome li button{margin-left:6px;padding:2px 12px;font-size:13px}
+.welcome code{font-size:12.5px}
 .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;
   background:color-mix(in srgb,var(--me) 16%,var(--surface));border:1px solid var(--line)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
@@ -88,7 +91,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--me);
 /* talk views: the page is the window's height, the feed scrolls inside itself and the talk bar sits under it */
 #main:has(>.houseview,>.talkview){overflow:hidden;padding:0;display:flex;flex-direction:column}
 .houseview,.talkview{display:flex;flex-direction:column;flex:1;min-height:0;margin:0;padding:28px 0 0}
-.houseview>.hero,.talkview>.hero,.talkview>.tabs{margin-left:32px;margin-right:32px}
+.houseview>.hero,.houseview>.welcome,.talkview>.hero,.talkview>.tabs{margin-left:32px;margin-right:32px}
+.houseview>.welcome{flex-shrink:0}
 .talkview>.tabs{margin-bottom:0}
 .talkview #panel{display:flex;flex-direction:column;flex:1;min-height:0}
 .houseview .feed,.talkview .feed{flex:1;min-height:0;overflow-y:auto;padding:18px 32px}
@@ -267,7 +271,7 @@ function renderSidebar(){
   const home=S.robots.filter(isHome).length;
   const unfinished=[...S.builds].reverse().find(b=>!buildDone(b));
   const won=S.workshops.filter(w=>w.online).length;
-  const sysBad=S.system?Object.values(S.system.services||{}).filter(v=>!v.ready).length
+  const sysBad=S.system?Object.values(S.system.services||{}).filter(v=>!v.ready&&!v.off).length
     +S.workshops.filter(w=>!w.online).length:0;
   let h=`<div class="brand">Ponki</div><div class="liveline">${S.robots.length?`${home} of ${S.robots.length} robots home`:"No robots yet"}</div>`;
   h+=`<button class="row ${S.sel==="house"?"sel":""}" data-sel="house">${houseFace(44)}<span class="tx"><span class="nm">The house</span><br><span class="st">Everything, everyone</span></span></button>`;
@@ -432,15 +436,60 @@ function wireMic(btn,to,noteEl){
   document.addEventListener("pointerup",stop); document.addEventListener("pointercancel",stop);
   btn.addEventListener("keyup",stop);
 }
+// First run: what a new visitor needs to know, from what the house can see.
+function welcomeHTML(){
+  let h="";
+  if(S.info&&S.info.key===false)h+=`<div class="card welcome bad"><h2>Ponki can't think yet</h2>
+    <p>There's no Meta Model API key, so the robots can't answer and the builder can't help.
+    Put <code>META_API_KEY=…</code> in <code>.env</code> (next to <code>compose.yaml</code>), then run
+    <code>docker compose up -d</code> again. Without Docker, restart the hub.</p></div>`;
+  if(store.get("ponki.welcomed",false))return h;
+  const robots=S.robots.filter(r=>!(r.record&&r.record.kind&&r.record.kind!=="robot"));
+  const desk=(S.system&&S.system.workshops||[]).some(w=>w.online&&(w.families||[]).includes("desk"));
+  const lamp=robots.find(r=>r.record&&r.record.device&&r.record.device.id==="desk:lamp");
+  const deskCam=robots.find(r=>r.record&&r.record.device&&r.record.device.id==="desk:camera");
+  const cam=deskCam||robots[0];
+  const won=(S.workshops||[]).some(w=>w.online);
+  const go=(sel,label)=>`<button class="quiet" data-go="${esc(sel)}">${label}</button>`;
+  const steps=[];
+  if(!cam){
+    steps.push(desk?`<li><strong>Add your first robot.</strong> The workshop has a virtual desk camera and a desk lamp
+      waiting: the builder (Muse Wonder) walks you through finding one, checking it and giving it a soul. ${go("add","Add a robot")}</li>`
+      :`<li><strong>No robots yet.</strong> Start a workshop on the machine your devices are attached to,
+      and Add a robot finds them (<code>docs/SETUP.md</code>).</li>`);
+  }else{
+    steps.push(`<li><strong>Meet ${esc(disp(cam))}.</strong> Open it and type on its Talk tab:
+      <em>“${deskCam?`Hi ${esc(disp(cam))}! Can you find the orange and the rubber duck?`:`Hi ${esc(disp(cam))}, what can you do?`}”</em>
+      ${go(cam.name,"Open "+esc(disp(cam)))}</li>`);
+    steps.push(desk&&!lamp?`<li><strong>Add a robot.</strong> A virtual desk lamp is waiting on the workshop:
+      the builder (Muse Wonder) walks you through finding it, checking it and giving it a soul. ${go("add","Add a robot")}</li>`
+      :won?`<li><strong>Add a robot.</strong> Plug a device into a workshop and the builder finds it. ${go("add","Add a robot")}</li>`
+      :`<li><strong>Add a robot.</strong> Start a workshop on the machine your devices are attached to, and Add a robot finds them.</li>`);
+    if(deskCam&&desk)steps.push(`<li><strong>Watch them work together.</strong> ${lamp?"":"Once the lamp has a soul, "}ask ${esc(disp(deskCam))}:
+      <em>“Ask the lamp to glow blue, then check with your own eyes.”</em> Everything they say shows up here.</li>`);
+  }
+  steps.push(`<li><strong>Look under the hood.</strong> Each robot's Stats tab shows what it spends;
+    System → Logs → API calls shows every call to Muse and SAM. ${go("system","System")}</li>`);
+  return h+`<div class="card welcome"><h2>Welcome to Ponki</h2>
+    <p class="hint">A home for robot souls. Every robot has a mind of its own (Muse Spark), finds things with SAM 3.1,
+    and gets things done by talking to the others.</p><ol>${steps.join("")}</ol>
+    <p><button class="quiet" id="welcomed">Got it, hide this</button></p></div>`;
+}
+function wireWelcome(){
+  $$("#main [data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="add")S.landing=true;
+    if(byId(b.dataset.go)){S.tab="talk";store.set("ponki.tab","talk")} select(b.dataset.go)});
+  const w=$("#welcomed"); if(w)w.onclick=()=>{store.set("ponki.welcomed",true); viewHouse()};
+}
 function viewHouse(){
   document.documentElement.style.setProperty("--me","#1b2340");
   const hasMic=S.mic&&S.mic.house_mic;
   $("#main").innerHTML=`<div class="wrap houseview"><div class="hero"><div>
     <h1>The house</h1><p class="hint">Every robot, every conversation, as it happens.</p></div></div>
+    ${welcomeHTML()}
     <div class="feed" id="feed">${feedList(S.events,"house")}</div>
     <div class="composer">${micButtonHTML("micbtn")}
-    <span class="hint" id="michint">${hasMic?`Hold to talk, and say a robot's name: “Keiki, where's the orange?”`:"No house mic is online."}</span></div></div>`;
-  wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint"));
+    <span class="hint" id="michint">${hasMic?`Hold to talk, and say a robot's name: “Keiki, where's the orange?”`:"No house mic is online: open a robot and type on its Talk tab."}</span></div></div>`;
+  wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint")); wireWelcome();
   for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
 function heroHTML(r){
@@ -719,7 +768,8 @@ function viewAdd(){
     <span class="disc" style="width:72px;height:72px;font-size:30px"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg></span>
     <div><h1>Add a robot</h1><p class="hint">The builder walks you through it: pick a device, connect it, describe it, check it, give it a soul.</p></div></div>
     ${won.length?`<p>Workshops online: ${won.map(w=>`<strong>${esc(w.display_name||w.id)}</strong>`).join(", ")}. Plug a device into one of them, or put it on the network.</p>`
-      :`<p class="pill bad">No workshop is online. Start the workshop on the machine your device is attached to.</p>`}
+      :`<p class="pill bad">No workshop is online. Start the workshop on the machine your device is attached to.</p>
+        <p class="hint">With Docker, <code>docker compose up</code> starts one with a virtual desk to try. Otherwise see <code>docs/SETUP.md</code>.</p>`}
     <div class="composer"><button id="startbuild">Start building</button></div>
     <p class="hint">An Arduino starter kit, an IP camera, a robot you already own: each becomes a robot with a soul in a few minutes.</p>
     <h2>Builds</h2>${S.builds.length?[...S.builds].reverse().map(b=>`<div class="card">
@@ -895,11 +945,13 @@ function viewSystem(){
   document.documentElement.style.setProperty("--me","#1b2340");
   const sys=S.system||{services:{},workshops:[],equipment:[]};
   const svc=(id,title,desc,extra)=>{const s=(sys.services||{})[id]||{};
-    return `<div class="card"><h2>${title} <span class="pill ${s.ready?"good":"bad"}">${s.ready?"running":"needs attention"}</span></h2>
-    <p class="hint">${desc}</p><p class="mono">${esc(extra||s.detail||s.model||"")}</p></div>`};
+    return `<div class="card"><h2>${title} <span class="pill ${s.ready?"good":s.off?"":"bad"}">${s.ready?"running":s.off?"off":"needs attention"}</span></h2>
+    <p class="hint">${desc}</p><p class="mono">${esc(extra||(s.off?offNote[id]:"")||s.detail||s.model||"")}</p></div>`};
+  const offNote={voice:"Not part of this house: robots without a speaker talk in text. With Docker: docker compose --profile voice up",
+    ears:"Not part of this house: type to the robots instead of holding to talk."};
   let h=`<div class="wrap"><div class="hero">${houseFace(72)}<div><h1>System</h1>
     <p class="hint">The house's own machinery: its services, the workshops on each machine, and the equipment. Nothing here has a soul.</p></div></div><h2>Ponki</h2>`;
-  h+=svc("hub","The hub","The house itself: souls, the record, the builder, the web UI. On this NUC.",
+  h+=svc("hub","The hub","The house itself: souls, the record, the builder, the web UI.",
     sys.hub?`${sys.hub.provider} · ${sys.hub.model} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString()} · ${sys.hub.robots} robots`:"");
   // hub is served implicitly: mark running when system loaded
   h=h.replace('needs attention','running');

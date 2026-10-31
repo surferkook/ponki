@@ -191,7 +191,10 @@ class Family(unittest.TestCase):
         self.assertEqual(family.problems({}), ([], []))
         body = family.body({}, device)
         self.assertTrue(any("56 gestures" in row[1] for row in body["rows"]))
-        result = asyncio.run(family.check(device, {}, "camera"))
+        # the example names the real server; the check must use the fake one,
+        # past the fake's deliberately failed first shot (the driver retries it)
+        self.fake.looks = 1
+        result = asyncio.run(family.check({**device, "web": self.fake.web}, {}, "camera"))
         self.assertIn("image", result)
 
 

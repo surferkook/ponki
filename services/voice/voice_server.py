@@ -1,5 +1,7 @@
 """The house voice: text to 48 kHz speech in 9 voices (spec 06).
 
+HOUSE_VOICES narrows them (the Docker image ships two: af_heart, am_puck).
+
     uvicorn voice_server:app --host 127.0.0.1 --port 8202
 
 Kokoro (hexgrad/Kokoro-82M) and Piper (rhasspy/piper-voices, models in
@@ -38,6 +40,12 @@ VOICES = {
     "en_US-hfc_female-medium": "HFC (Piper): bright, crisp woman",
     "en_US-ryan-medium": "Ryan (Piper): clear, friendly man",
 }
+# HOUSE_VOICES (comma list) narrows the voices, e.g. af_heart,am_puck for a
+# house that ships only Kokoro (Apache 2.0) and no Piper models.
+_ONLY = [v.strip() for v in os.environ.get("HOUSE_VOICES", "").split(",") if v.strip()]
+if _ONLY:
+    VOICES = {k: v for k, v in VOICES.items() if k in _ONLY} or VOICES
+_FIRST = next(iter(VOICES))
 
 app = FastAPI(title="ponkihouse voice")
 _state = {"state": "loading", "error": None}
@@ -52,7 +60,9 @@ def _load() -> None:
         from kokoro import KPipeline
 
         _kokoro = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-        _speak_kokoro("Ready.", "af_heart", 1.0)  # warm-up
+        kokoro_voice = next((v for v in VOICES if not v.startswith("en_US-")), None)
+        if kokoro_voice:
+            _speak_kokoro("Ready.", kokoro_voice, 1.0)  # warm-up
         for voice_id in VOICES:
             if voice_id.startswith("en_US-"):
                 _piper_voice(voice_id)
@@ -141,7 +151,7 @@ def speak(payload: dict):
     text = (payload.get("text") or "").strip()[:1000]
     if not text:
         raise HTTPException(400, "empty text")
-    voice_id = payload.get("voice") or "af_heart"
+    voice_id = payload.get("voice") or _FIRST
     if voice_id not in VOICES:
         raise HTTPException(400, f"unknown voice '{voice_id}'")
     speed = min(1.6, max(0.6, float(payload.get("speed", 1.0))))

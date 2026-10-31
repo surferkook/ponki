@@ -113,7 +113,7 @@ import_secret(device, config_path, secret) -> None
 
 Registry
 --------
-``NAMES = ("pins", "onvif", "robohon", "mic", "mbot2")`` in this order;
+``NAMES = ("pins", "onvif", "robohon", "mic", "mbot2", "desk")`` in this order;
 ``FAMILIES`` maps name -> module, imported eagerly. ``get(name)`` returns
 the module and raises ``ValueError`` naming the known families for an
 unknown name. ``guides()`` joins ``"## <TITLE> (family: <NAME>)\\n<GUIDE>"``
@@ -138,7 +138,7 @@ import os
 import re
 from pathlib import Path
 
-NAMES: tuple[str, ...] = ("pins", "onvif", "robohon", "mic", "mbot2")
+NAMES: tuple[str, ...] = ("pins", "onvif", "robohon", "mic", "mbot2", "desk")
 
 FAMILIES: dict = {}
 

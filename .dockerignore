@@ -1,0 +1,14 @@
+# Never in the image: secrets, runtime state, local environments
+.env
+data/
+.git/
+**/.venv/
+**/venv/
+**/node_modules/
+**/__pycache__/
+*.py[cod]
+services/voice/voices/
+docs/media/
+.DS_Store
+.idea/
+.vscode/

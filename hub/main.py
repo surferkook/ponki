@@ -83,11 +83,11 @@ async def _services(house: House) -> dict:
     ears_h = await hearing_mod.health()
     find_h = await grounding_mod.health()
     return {
-        "voice": {"ready": voice_h.get("state") == "ready",
+        "voice": {"ready": voice_h.get("state") == "ready", "off": voice_h.get("state") == "off",
                   "state": voice_h.get("state"),
                   "detail": house.voice_error or voice_h.get("error") or "",
                   "speakers": sorted(house.fixtures_of("speaker"))},
-        "ears": {"ready": ears_h.get("state") == "ready",
+        "ears": {"ready": ears_h.get("state") == "ready", "off": ears_h.get("state") == "off",
                  "state": ears_h.get("state"),
                  "detail": ears_h.get("error") or "",
                  "model": ears_h.get("model")},
@@ -130,7 +130,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         provider = get_provider("")
     except ValueError as exc:  # a contributor model or a bad effort fails at start-up
         raise SystemExit(f"cannot start the hub: {exc}")
-    house = House(provider, os.environ.get("HOUSE_HUMAN", "your human"), data_dir)
+    house = House(provider, os.environ.get("HOUSE_HUMAN") or "your human", data_dir)
     builder = Builder(house)
     house.builder = builder  # type: ignore[attr-defined]
     threading.Thread(target=_fingerprint_sweep, args=(house,), daemon=True).start()
@@ -183,6 +183,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         price = ({"in": found[0], "out": found[1], "cached": found[2]} if found else None)
         return {"provider": house.provider_name, "model": house.model,
                 "human": house.human, "price": price,
+                "key": bool(os.environ.get("META_API_KEY", "").strip()),
                 "ui": STATIC.stat().st_mtime if STATIC.exists() else 0,
                 "voice": {**await voice_mod.health(),
                           "speakers": sorted(house.fixtures_of("speaker"))}}
