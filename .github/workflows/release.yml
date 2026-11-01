@@ -4,7 +4,7 @@
 # and only then is a GitHub Release written.
 #
 #   ghcr.io/surferkook/ponki        hub, finding, workshop
-#   ghcr.io/surferkook/ponki-voice  the house voice (Kokoro, two voices)
+#   ghcr.io/surferkook/ponki-voice  the house voice (Meta MMS-TTS)
 #
 # compose.yaml names these images, so `docker compose up` pulls a release
 # and `docker compose up --build` builds from source.
@@ -48,8 +48,10 @@ jobs:
             runner: ubuntu-24.04-arm
           - image: ponki
             context: .
+            license: Apache-2.0
           - image: ponki-voice
             context: services/voice
+            license: Apache-2.0 AND CC-BY-NC-4.0   # the MMS-TTS model inside is non-commercial
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,6 +68,7 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          labels: org.opencontainers.image.licenses=${{ matrix.license }}
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -217,7 +220,7 @@ jobs:
           ## Images (linux/amd64 and linux/arm64)
 
           - \`ghcr.io/$OWNER/ponki:${TAG#v}\`: hub, finding (SAM 3.1), workshop
-          - \`ghcr.io/$OWNER/ponki-voice:${TAG#v}\`: the house voice (Kokoro-82M, Apache 2.0)
+          - \`ghcr.io/$OWNER/ponki-voice:${TAG#v}\`: the house voice (Meta MMS-TTS, CC-BY-NC 4.0)
 
           Both carry build provenance and an SBOM.
 

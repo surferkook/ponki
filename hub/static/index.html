@@ -983,7 +983,7 @@ function viewSystem(){
     <div class="syscard"><div class="top"><h3>The hub</h3>${pill(true,"running")}</div>
       <p class="hint">The house itself: souls, the record, the builder, the web UI.</p>
       ${sys.hub?`<p class="mono">${esc(sys.hub.provider)} · ${esc(sys.hub.model)} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} · ${sys.hub.robots} robots</p>`:""}</div>
-    ${svc("voice","Voice","Speaks for robots without a speaker of their own (Kokoro, Piper).")}
+    ${svc("voice","Voice","Speaks for robots without a speaker of their own (Meta MMS-TTS).")}
     ${svc("ears","Ears","Turns what the house mic hears into text.")}
     ${svc("finding","Finding","“Where exactly is X?” for robots with a camera.")}</div>
     <h3 class="sub">House settings</h3><div class="settings">

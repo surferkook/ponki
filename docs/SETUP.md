@@ -15,7 +15,7 @@ What compose sets up, and where:
 | `hub` | the house, on http://localhost:8200, and the door for robots on :8210 (both this machine only) | `META_API_KEY`, `HOUSE_HUMAN`, `HOUSE_TOKEN` from `.env` |
 | `sam` | finding (SAM 3.1), reached by the hub as `http://sam:8201` | `META_API_KEY` |
 | `workshop` | a workshop named `desk-workshop` with only the virtual desk | `HOUSE_DESK=on`, `HOUSE_WORKSHOP_FAMILIES=desk` |
-| `voice` | `--profile voice`: Kokoro with two voices, Heart and Puck | `HOUSE_VOICES=af_heart,am_puck` |
+| `voice` | `--profile voice`: Meta MMS-TTS, six voices made from its one speaker | none |
 
 The house's memory lives in two volumes, `ponki_hub` and `ponki_workshop`. On the
 first start the entrypoint copies `demo/hub` and `demo/workshop` into them once.
@@ -93,21 +93,18 @@ actions run from the Body tab.
 
 ## The house voice and hearing
 
-Robots without a speaker speak through the house voice (Kokoro + Piper,
-all 48 kHz), and the house hears people through a mic fixture and the ears
-(Muse Voice Transcribe, with faster-whisper offline as fallback).
-
-`HOUSE_VOICES` (a comma list, set for both the hub and the voice service)
-narrows the nine voices to the ones you have, for example
-`af_heart,am_puck` without the Piper models. The Piper voices are for your
-own use: their training data is licensed non-commercially, so they are
-downloaded, never shipped.
+Every model Ponki calls at runtime is a Meta model. Robots without a
+speaker speak through the house voice: Meta's MMS-TTS
+(`facebook/mms-tts-eng`, CC-BY-NC 4.0), run locally on the CPU at 48 kHz.
+It has one English speaker, so the six voices (warm, bright, small, low,
+playful, soft) are presets of its pitch and pace. The house hears people
+through a mic fixture and the ears (Muse Voice Transcribe, which needs
+`META_API_KEY`; there is no offline fallback).
 
 ```bash
 python3 -m venv services/voice/.venv
 services/voice/.venv/bin/pip install -r services/voice/requirements.txt
-# Piper models (not in git), from rhasspy/piper-voices on Hugging Face:
-#   en/en_US/{amy,hfc_female,ryan}/medium/*.onnx(+ .json) → services/voice/voices/
+# MMS-TTS (facebook/mms-tts-eng) downloads from Hugging Face on the first start
 python3 -m venv services/ears/.venv
 services/ears/.venv/bin/pip install -r services/ears/requirements.txt
 ./deploy/install.sh ponkihouse-voice ponkihouse-ears

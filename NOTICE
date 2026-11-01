@@ -3,5 +3,7 @@ Copyright 2026 surferkook (https://github.com/surferkook)
 
 This product includes software developed by surferkook.
 
-The ponki-voice container image includes Kokoro-82M (https://huggingface.co/hexgrad/Kokoro-82M),
-licensed under the Apache License, Version 2.0.
+The ponki-voice container image includes Meta's MMS-TTS English model
+(https://huggingface.co/facebook/mms-tts-eng), licensed under the Creative Commons
+Attribution-NonCommercial 4.0 International License (CC-BY-NC 4.0). That model, and so
+the ponki-voice image, may be used for non-commercial purposes only.

@@ -27,21 +27,29 @@ class CleanVoices(unittest.TestCase):
     def test_unknown_id(self) -> None:
         self.assertIsNone(clean({"id": "nope"}))
         self.assertIsNone(clean(None))
-        self.assertIsNone(clean({"id": "af_heart", "pitch": "loud"}))
+        self.assertIsNone(clean({"id": "warm", "pitch": "loud"}))
 
     def test_clamping_and_rounding(self) -> None:
-        out = clean({"id": "af_heart", "pitch": 9, "speed": 0.1})
-        self.assertEqual(out, {"id": "af_heart", "pitch": 1.6, "speed": 0.6})
-        out = clean({"id": "af_heart", "pitch": 1.23456, "speed": 1.0})
+        out = clean({"id": "warm", "pitch": 9, "speed": 0.1})
+        self.assertEqual(out, {"id": "warm", "pitch": 1.6, "speed": 0.6})
+        out = clean({"id": "warm", "pitch": 1.23456, "speed": 1.0})
         self.assertEqual(out["pitch"], 1.23)
 
     def test_min_pitch_for_births(self) -> None:
-        out = clean({"id": "am_puck", "pitch": 0.8}, min_pitch=1.0)
+        out = clean({"id": "playful", "pitch": 0.8}, min_pitch=1.0)
         self.assertEqual(out["pitch"], 1.0)
 
     def test_missing_values_default(self) -> None:
-        out = clean({"id": "af_sky"})
-        self.assertEqual(out, {"id": "af_sky", "pitch": 1.0, "speed": 1.0})
+        out = clean({"id": "small"})
+        self.assertEqual(out, {"id": "small", "pitch": 1.0, "speed": 1.0})
+
+    def test_old_voices_map_to_presets(self) -> None:
+        # souls born before the house spoke with MMS keep a voice of their own
+        self.assertEqual(clean({"id": "am_puck", "pitch": 1.3}),
+                         {"id": "playful", "pitch": 1.3, "speed": 1.0})
+        self.assertEqual(clean({"id": "af_sky", "pitch": 1.25})["id"], "warm")
+        self.assertEqual(clean({"id": "en_US-ryan-medium"})["id"], "warm")
+        self.assertEqual(clean({"id": "puck"})["id"], "playful")
 
 
 class DefaultVoices(unittest.TestCase):

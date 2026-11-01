@@ -155,11 +155,11 @@ def main() -> int:
     call(hub, f"/api/builds/{build['id']}", method="DELETE")
 
     if args.voice:
-        status, wav, kind = call(hub, "/api/robots/pip/voice/preview", {"id": "am_puck"}, timeout=120)
-        check(status == 200 and wav[:4] == b"RIFF" and len(wav) > 20000, "the house voice speaks (Kokoro)",
+        status, wav, kind = call(hub, "/api/robots/pip/voice/preview", {"id": "playful"}, timeout=120)
+        check(status == 200 and wav[:4] == b"RIFF" and len(wav) > 20000, "the house voice speaks (MMS-TTS)",
               f"{status} {kind} {wav[:120]!r}")
     else:
-        status, body, _ = call(hub, "/api/robots/pip/voice/preview", {"id": "am_puck"})
+        status, body, _ = call(hub, "/api/robots/pip/voice/preview", {"id": "playful"})
         check(status == 503 and "--profile voice" in str(body), "without voice, it says how to turn it on",
               f"{status} {body}")
 

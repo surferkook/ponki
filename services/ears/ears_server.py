@@ -2,9 +2,9 @@
 
     uvicorn ears_server:app --host 127.0.0.1 --port 8203
 
-Muse Voice Transcribe 1.0 first (Meta's ASR API, not OpenAI's shape), with
-faster-whisper on the CPU as the offline fallback. EARS_ENGINE=auto|muse|
-whisper. The mic cuts the clip; this service only transcribes it.
+Muse Voice Transcribe 1.0 (Meta's ASR API, not OpenAI's shape), and only
+Muse: every model Ponki calls at runtime is a Meta model, so there is no
+local fallback. The mic cuts the clip; this service only transcribes it.
 """
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import asyncio
 import io
 import json
 import os
-import threading
 import time
 import wave
 
@@ -20,17 +19,12 @@ import httpx
 import numpy as np
 from fastapi import FastAPI, HTTPException
 
-ENGINE = os.environ.get("EARS_ENGINE", "auto")
-MODEL = os.environ.get("EARS_MODEL", "small")
 LANGUAGE = os.environ.get("EARS_LANGUAGE", "en")
-THREADS = int(os.environ.get("EARS_THREADS", "0") or (os.cpu_count() or 4) // 2)
 MUSE_URL = "https://api.meta.ai/v1/asr/transcribe"
 LANGUAGES = {"en": "English", "nl": "Dutch", "de": "German", "fr": "French",
              "es": "Spanish"}
 
 app = FastAPI(title="ponkihouse ears")
-_lock = threading.Lock()
-_whisper = {"state": "loading", "model": None, "error": None}
 
 
 # -- WAV helpers (pure) ---------------------------------------------------------
@@ -140,54 +134,14 @@ class MuseError(Exception):
     pass
 
 
-# -- whisper path -------------------------------------------------------------------
-
-def _load_whisper() -> None:
-    if ENGINE == "muse":
-        _whisper.update(state="off")
-        return
-    try:
-        from faster_whisper import WhisperModel
-
-        _whisper["model"] = WhisperModel(
-            MODEL, device="cpu", compute_type="int8",
-            cpu_threads=max(1, THREADS))
-        _whisper.update(state="ready")
-    except Exception as exc:
-        _whisper.update(state="error", error=f"{type(exc).__name__}: {exc}")
-
-
-def whisper_transcribe(samples: np.ndarray, rate: int) -> str:
-    model = _whisper.get("model")
-    if model is None:
-        raise RuntimeError("whisper isn't ready")
-    audio = resample(samples, rate, 16000).astype(np.float32) / 32768.0
-    with _lock:
-        segments, _info = model.transcribe(
-            audio, language=LANGUAGE, beam_size=5, vad_filter=True,
-            condition_on_previous_text=False)
-        return "".join(segment.text for segment in segments).strip()
-
-
-threading.Thread(target=_load_whisper, daemon=True).start()
-
-
 # -- the service ----------------------------------------------------------------------
 
 @app.get("/health")
 def health():
-    muse = "configured" if os.environ.get("META_API_KEY") else "no key"
-    whisper = _whisper["state"]
-    can_run = (ENGINE != "whisper" and muse == "configured") \
-        or whisper == "ready"
-    if can_run:
-        state = "ready"
-    elif whisper == "loading":
-        state = "loading"
-    else:
-        state = "error"
-    return {"state": state, "error": _whisper.get("error"), "engine": ENGINE,
-            "muse": muse, "whisper": whisper, "model": MODEL}
+    if os.environ.get("META_API_KEY"):
+        return {"state": "ready", "error": None, "engine": "muse", "muse": "configured"}
+    return {"state": "error", "error": "no META_API_KEY: hearing uses Muse Voice Transcribe",
+            "engine": "muse", "muse": "no key"}
 
 
 @app.post("/transcribe")
@@ -203,25 +157,11 @@ async def transcribe(payload: dict):
                             if str(exc).startswith("can't") else
                             f"can't read that audio: {exc}")
     seconds = round(len(samples) / rate, 2) if rate else 0.0
-    keywords = payload.get("keywords") or []
-    fallback = None
-    if ENGINE in ("auto", "muse") and os.environ.get("META_API_KEY"):
-        try:
-            result = await muse_transcribe(raw, keywords)
-            return {**result, "seconds": seconds, "engine": "muse",
-                    "ms": int((time.time() - started) * 1000),
-                    "fallback": None}
-        except MuseError as exc:
-            if ENGINE == "muse":
-                raise HTTPException(503, str(exc))
-            fallback = str(exc)
-    if _whisper["state"] != "ready":
-        raise HTTPException(503, fallback or "no engine can run: whisper "
-                            f"is {_whisper['state']}")
+    if not os.environ.get("META_API_KEY"):
+        raise HTTPException(503, "no META_API_KEY: hearing uses Muse Voice Transcribe")
     try:
-        text = await asyncio.to_thread(whisper_transcribe, samples, rate)
-    except Exception as exc:
-        raise HTTPException(503, f"whisper failed: {exc}")
-    return {"text": text, "language": LANGUAGE, "seconds": seconds,
-            "ms": int((time.time() - started) * 1000), "engine": "whisper",
-            "billed_seconds": 0, "session_id": None, "fallback": fallback}
+        result = await muse_transcribe(raw, payload.get("keywords") or [])
+    except MuseError as exc:
+        raise HTTPException(503, str(exc))
+    return {**result, "seconds": seconds, "engine": "muse",
+            "ms": int((time.time() - started) * 1000)}

@@ -1,6 +1,4 @@
 # The ears' own venv (Python 3.10 on the NUC).
-faster-whisper==1.2.1
-ctranslate2==4.8.3
 numpy==2.2.6
 httpx==0.28.1
 fastapi==0.162.0
