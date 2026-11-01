@@ -11,7 +11,7 @@
 <p align="center">
   <!-- <a href="https://youtu.be/TODO"><b>▶ Watch the demo</b></a> · -->
   Meta Global AI Developer Hackathon, Indie track ·
-  Built with Muse Spark, SAM 3.1 and Muse Code
+  Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
 
 Ponki turns the devices you already have into robots that live together, from the forgotten board at the back
@@ -32,6 +32,9 @@ hardware, and it comes back as itself.
 
 - **Robots that cooperate by talking.** Keiki finds the orange with SAM 3.1, works out which way the rover is
   facing and talks Vroom-Vroom there one move at a time. Nobody steers.
+- **Moments nobody asked for.** A body's senses start a turn by themselves: switch off the lights and Buddy notices
+  the room went dark and says something about it. Robots keep habits of their own too, and the house gives them
+  their moment, so things happen between your questions.
 - **Robots that react to each other.** When a robot speaks, the house decides whether anyone who heard it would
   naturally react. Buddy cheers when a housemate finishes a task, because he promised to.
 - **A new robot in about 15 minutes.** *Add a robot* finds a device on USB or the network, connects it, checks
@@ -86,6 +89,7 @@ with its tokens and cost, so you can see what every robot spends.
 ## Six layers, one rule
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 720}}}%%
 flowchart TB
   L6["6 · MODEL<br/>Muse Spark · Muse Wonder · SAM 3.1 · Voice Transcribe · Muse Image<br/>swappable providers"]
   L5["5 · HOUSE<br/>record · souls · room and floor · voice · hearing · finding · builder · remembrance · web UI<br/>never knows a device family"]
@@ -114,6 +118,7 @@ declares. Adding a new kind of device means one family module and its driver; th
 ## What runs where
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 720}}}%%
 flowchart LR
   you(["You · browser · house mic"]) --> hub
   subgraph meta ["Meta Model API"]
