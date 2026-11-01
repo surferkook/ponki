@@ -6,7 +6,7 @@ Run it against a house started from scratch (docker compose up, empty
 volumes). Standard library only. Without a key it checks everything that
 needs no model: the services, the workshop and its virtual desk, Pip seeded
 and online, a photo from Pip's camera, the lamp waiting in Add a robot, the
-web page. --voice also checks the house voice speaks. --e2e (needs
+web page, and that the door for robots (:8210) shows nothing else. --voice also checks the house voice speaks. --e2e (needs
 META_API_KEY in the house) asks Pip to find the orange: Muse Spark plus
 SAM 3.1, end to end.
 """
@@ -68,6 +68,10 @@ def main() -> int:
     ap.add_argument("--voice", action="store_true", help="the voice profile is running")
     ap.add_argument("--e2e", action="store_true", help="a real Pip turn (needs META_API_KEY)")
     ap.add_argument("--wait", type=float, default=180, help="seconds to wait for start-up")
+    ap.add_argument("--door", default="http://localhost:8210",
+                    help="the hub's door for robots ('' to skip)")
+    ap.add_argument("--workshop", action="append", default=[],
+                    help="also expect this workshop online (e.g. one that came in through the door)")
     args = ap.parse_args()
     hub = args.hub.rstrip("/")
 
@@ -102,6 +106,18 @@ def main() -> int:
             if w["id"] == "desk-workshop" and w["online"] and "desk" in w["families"]:
                 return w
     wait("the desk workshop is online with the virtual desk", desk_workshop, args.wait)
+
+    if args.door:
+        door = args.door.rstrip("/")
+        status, body, _ = call(door, "/")
+        check(status == 404 and b"door for robots" in body, "the door for robots doesn't show the web UI",
+              f"{status} {body[:120]!r}")
+        check(call(door, "/api/robots")[0] == 404, "nor the API")
+        check(call(door, "/api/voice/1.wav")[0] == 404, "and voice clips need the token")
+    for name in args.workshop:
+        wait(f"the workshop {name} is online",
+             lambda: any(w["id"] == name and w["online"] for w in call(hub, "/api/system")[1]["workshops"]),
+             args.wait)
 
     def pip_online():
         robots = {r["name"]: r for r in call(hub, "/api/robots")[1]}

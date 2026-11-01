@@ -12,7 +12,7 @@ What compose sets up, and where:
 
 | Service | What it is | Settings that matter |
 |---|---|---|
-| `hub` | the house, on http://localhost:8200 (this machine only) | `META_API_KEY`, `HOUSE_HUMAN`, `HOUSE_TOKEN` from `.env` |
+| `hub` | the house, on http://localhost:8200, and the door for robots on :8210 (both this machine only) | `META_API_KEY`, `HOUSE_HUMAN`, `HOUSE_TOKEN` from `.env` |
 | `sam` | finding (SAM 3.1), reached by the hub as `http://sam:8201` | `META_API_KEY` |
 | `workshop` | a workshop named `desk-workshop` with only the virtual desk | `HOUSE_DESK=on`, `HOUSE_WORKSHOP_FAMILIES=desk` |
 | `voice` | `--profile voice`: Kokoro with two voices, Heart and Puck | `HOUSE_VOICES=af_heart,am_puck` |
@@ -21,9 +21,57 @@ The house's memory lives in two volumes, `ponki_hub` and `ponki_workshop`. On th
 first start the entrypoint copies `demo/hub` and `demo/workshop` into them once.
 Ears are off: a container has no house mic, so you type to the robots.
 
-To let workshops on other machines join a containerised hub, publish the port
-beyond this machine (`"8200:8200"` in `compose.yaml`) and set a long random
-`HOUSE_TOKEN`. There is no login, so keep it on your LAN or tailnet.
+The hub, the finding service and the voice have health checks, and the
+workshop waits for a healthy hub. Logs rotate at 10 MB, three files per
+service. Everything you might change goes in `.env` as a `PONKI_` setting
+(see `.env.example`), so `compose.yaml` stays as it is and `git pull` stays
+clean.
+
+### Workshops on other machines
+
+The house can run in Docker while workshops run next to the hardware: the Pi
+with the Arduino on USB, a laptop near the rover. A workshop needs to be on
+the machine its devices are plugged into, and USB and network discovery don't
+reach into a container, so those workshops run natively.
+
+The hub has two ports for this:
+
+| Port | Answers | Default |
+|---|---|---|
+| `8200` | the web UI, its API and bodies | this machine only (`PONKI_BIND`) |
+| `8210` | **only** bodies: `/ws/body` and voice clips for speakers, both token-checked | this machine only (`PONKI_BODY_BIND`) |
+
+On the machine running the house, open the door for robots and set a real
+token in `.env`:
+
+```bash
+PONKI_BODY_BIND=0.0.0.0
+HOUSE_TOKEN=<python3 -c 'import secrets; print(secrets.token_urlsafe(32))'>
+```
+
+then `docker compose up -d`. If `PONKI_BODY_BIND` reaches beyond this machine
+and the token is empty, the example value or shorter than 24 characters, the
+hub doesn't start and says why.
+
+On each other machine, set up the workshop as in the sections below, and
+point it at the door for robots:
+
+```bash
+HOUSE_HUB=ws://<house machine>:8210 HOUSE_TOKEN=<same token> HOUSE_WORKSHOP_NAME=pi-workshop \
+  .venv/bin/python bodies/workshop/workshop.py
+```
+
+It shows up under System → Workshops, and its devices in Add a robot. To keep
+it running, see [Run it as a service](#run-it-as-a-service).
+
+- **The web UI stays on this machine.** `PONKI_BIND=0.0.0.0` publishes it too,
+  but it has no login: only on a LAN you trust or a tailnet.
+- **Across a network you don't trust**, put `8210` behind a TLS proxy (Caddy,
+  Tailscale Serve) and use `wss://` in `HOUSE_HUB`; the token travels in the
+  first message.
+- **Sidecars on the house machine itself** (ears with a real mic, for one) are
+  reachable from the hub as `host.docker.internal`, on Linux too:
+  `PONKI_EARS_URL=http://host.docker.internal:8203`.
 
 ## Run the hub (Step 1)
 

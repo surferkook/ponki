@@ -325,7 +325,9 @@ docker compose --profile voice up --build
 `docker compose down -v` forgets everything, and the next start is a first run again.
 
 The virtual desk exists so you can try the house without hardware. Real devices need a workshop on the machine
-they're plugged into; see [Run it on your own machines](#run-it-on-your-own-machines).
+they're plugged into; see [Run it on your own machines](#run-it-on-your-own-machines). The house in Docker and
+workshops on other machines mix: they dial in on a port that answers only robots
+([Workshops on other machines](docs/SETUP.md#workshops-on-other-machines)).
 
 ## Run it on your own machines
 
@@ -356,7 +358,7 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 ```
 
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 221 tests, about 35 s: no hardware, network or model calls
+.venv/bin/python -m unittest discover -s tests    # 229 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built
