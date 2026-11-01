@@ -2,11 +2,9 @@
 <p align="center"><b>A home for robot souls.</b></p>
 <p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, and Ponki in a box on amd64 and arm64"></a></p>
 
-<!-- TODO before submitting: add docs/media/hero.jpg and the demo link, then uncomment
 <p align="center">
-  <img src="docs/media/hero.jpg" width="860" alt="Hero shot: Keiki the camera guides Vroom-Vroom the rover to an orange on the dining table while Buddy and RoBoHoN look on">
+  <img src="docs/media/video.jpg" width="860" alt="RoBoHoN, Vroom-Vroom and Buddy on the dining table">
 </p>
--->
 
 <p align="center">
   <!-- <a href="https://youtu.be/TODO"><b>▶ Watch the demo</b></a> · -->
