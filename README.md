@@ -370,4 +370,6 @@ Thanks to the projects it stands on: FastAPI, Kokoro, Piper, faster-whisper, Mak
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). You may use, change and share Ponki, commercially too,
+as long as you keep the notices and say what you changed. The license doesn't cover the name Ponki: a fork needs a
+name of its own. Releases up to and including v1.0.0-rc.3 were published under the MIT License.
