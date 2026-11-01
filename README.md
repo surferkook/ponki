@@ -3,7 +3,7 @@
 <p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, and Ponki in a box on amd64 and arm64"></a></p>
 
 <p align="center">
-  <img src="docs/media/video.jpg" width="860" alt="RoBoHoN, Vroom-Vroom and Buddy on the dining table">
+  <img src="docs/media/video.jpg" width="860" alt="RoBoHoN on the table: I used to be a phone, but now I have a soul">
 </p>
 
 <p align="center">
