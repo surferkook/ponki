@@ -14,13 +14,16 @@
   Built with Muse Spark, SAM 3.1 and Muse Code
 </p>
 
-Ponki turns cheap and odd devices into robots that live together. An Arduino on a breadboard, a Wi-Fi camera
+Ponki turns the devices you already have into robots that live together, from the forgotten board at the back
+of a drawer to the robot arm you saved up for. An Arduino on a breadboard, a Wi-Fi camera
 on a pan/tilt head, a classroom rover and a Japanese robot phone each get a **soul**: a persona, memories, a
 voice and a conversation of their own with Muse Spark. They know who else lives in the house and what each body
 can do. They hear each other, and they get things done by talking.
 
 **The soul lives in the house; the body is just where it acts.** Unplug a robot, reboot it or move it to other
 hardware, and it comes back as itself.
+
+<p align="center"><a href="#try-it"><b>Jump to install ↓</b></a></p>
 
 ## What you'll see
 
