@@ -40,6 +40,7 @@ class Body:
         *,
         voice: str | None = None,
         voice_style: str | None = None,
+        voice_play: str | None = None,
         persona_hint: str | None = None,
         display_name: str | None = None,
         personality: str | None = None,
@@ -51,6 +52,7 @@ class Body:
         self.description = description
         self.voice = voice
         self.voice_style = voice_style
+        self.voice_play = voice_play
         self.persona_hint = persona_hint
         self.display_name = display_name
         self.personality = personality
@@ -116,6 +118,8 @@ class Body:
             m["voice"] = self.voice
         if self.voice_style:
             m["voice_style"] = self.voice_style
+        if self.voice_play:
+            m["voice_play"] = self.voice_play
         if self.persona_hint:
             m["persona_hint"] = self.persona_hint
         if self.personality:
@@ -125,6 +129,30 @@ class Body:
         if os.environ.get("HOUSE_WORKSHOP"):
             m["workshop"] = os.environ["HOUSE_WORKSHOP"]  # set by the workshop that started it
         return m
+
+    async def house_clip(self, path: str) -> bytes:
+        """A house-voice clip (/api/voice/<n>.wav) as WAV bytes, for a body that
+        declares voice_play and plays the house voice on its own speaker."""
+        if not (path or "").startswith("/api/voice/"):
+            raise ValueError("only house-voice clips (/api/voice/…) can be fetched")
+        base = self.hub_url
+        for ws, http in (("wss://", "https://"), ("ws://", "http://")):
+            if base.startswith(ws):
+                base = http + base[len(ws):]
+                break
+        if base.endswith("/ws/body"):
+            base = base[: -len("/ws/body")]
+
+        def fetch() -> bytes:
+            import urllib.request
+
+            req = urllib.request.Request(base + path)
+            if self.token:
+                req.add_header("Authorization", f"Bearer {self.token}")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.read()
+
+        return await asyncio.to_thread(fetch)
 
     # -- talking to the hub ------------------------------------------------
     async def _send(self, obj: dict[str, Any]) -> None:

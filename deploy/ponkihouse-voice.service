@@ -1,5 +1,5 @@
 [Unit]
-Description=Ponkihouse voice — Kokoro and Piper speech for the house
+Description=Ponkihouse voice — Meta MMS-TTS speech for the house
 After=network.target
 
 [Service]

@@ -1,9 +1,11 @@
 """The house voice: the catalogue and the client of the voice service (spec 06).
 
-The service (services/voice, :8202) turns text into 48 kHz speech in one of
-9 voices. The hub keeps an identical copy of the table because it must know
-the voices while the service is still loading. A soul's voice is
-{"id", "speed", "pitch"}; clean() is the one place voices are validated.
+The service (services/voice, :8202) speaks with Meta's MMS-TTS. It has one
+English speaker, so the house's voices are presets of it, each with its own
+pitch and pace; a soul's own pitch and speed go on top. The hub keeps an
+identical copy of the table because it must know the voices while the
+service is still loading. A soul's voice is {"id", "speed", "pitch"};
+clean() is the one place voices are validated.
 """
 from __future__ import annotations
 
@@ -15,36 +17,23 @@ import httpx
 VOICE_URL = os.environ.get("HOUSE_VOICE_URL", "http://127.0.0.1:8202")
 
 VOICES: list[dict] = [
-    {"id": "af_heart", "label": "Heart (Kokoro): warm, friendly woman",
-     "description": "warm, friendly woman"},
-    {"id": "af_bella", "label": "Bella (Kokoro): bright, lively woman",
-     "description": "bright, lively woman"},
-    {"id": "af_nicole", "label": "Nicole (Kokoro): soft, breathy, whispery woman",
-     "description": "soft, breathy, whispery woman"},
-    {"id": "af_sky", "label": "Sky (Kokoro): light, young woman",
-     "description": "light, young woman"},
-    {"id": "am_michael", "label": "Michael (Kokoro): warm, mature man",
-     "description": "warm, mature man"},
-    {"id": "am_puck", "label": "Puck (Kokoro): playful, cheeky man",
-     "description": "playful, cheeky man"},
-    {"id": "en_US-amy-medium", "label": "Amy (Piper): warm, clear woman",
-     "description": "warm, clear woman"},
-    {"id": "en_US-hfc_female-medium", "label": "HFC (Piper): bright, crisp woman",
-     "description": "bright, crisp woman"},
-    {"id": "en_US-ryan-medium", "label": "Ryan (Piper): clear, friendly man",
-     "description": "clear, friendly man"},
+    {"id": "warm", "label": "Warm (MMS): steady, friendly", "description": "steady, friendly voice"},
+    {"id": "bright", "label": "Bright (MMS): lively, clear", "description": "bright, lively voice"},
+    {"id": "small", "label": "Small (MMS): little, quick", "description": "small, quick voice"},
+    {"id": "low", "label": "Low (MMS): deep, calm", "description": "low, calm voice"},
+    {"id": "playful", "label": "Playful (MMS): cheeky, bouncy", "description": "playful, cheeky voice"},
+    {"id": "soft", "label": "Soft (MMS): gentle, unhurried", "description": "soft, gentle voice"},
 ]
-# HOUSE_VOICES (comma list) narrows the catalogue to what the voice service
-# has, e.g. af_heart,am_puck in the Docker image (Kokoro only).
-_ONLY = [v.strip() for v in os.environ.get("HOUSE_VOICES", "").split(",") if v.strip()]
-if _ONLY:
-    VOICES = [v for v in VOICES if v["id"] in _ONLY] or VOICES
 _IDS = {v["id"] for v in VOICES}
-# voices a soul may still carry from before the ids took their service names
-_LEGACY = {"heart": "af_heart", "bella": "af_bella", "nicole": "af_nicole",
-           "sky": "af_sky", "michael": "am_michael", "puck": "am_puck",
-           "amy": "en_US-amy-medium", "hfc": "en_US-hfc_female-medium",
-           "ryan": "en_US-ryan-medium"}
+# voices a soul may still carry from before the house spoke with MMS: each
+# goes to the nearest preset, and the soul's own pitch and speed still apply
+_LEGACY = {"af_heart": "bright", "af_bella": "bright", "af_nicole": "soft",
+           "af_sky": "warm", "am_michael": "low", "am_puck": "playful",
+           "en_US-amy-medium": "bright", "en_US-hfc_female-medium": "bright",
+           "en_US-ryan-medium": "warm",
+           "heart": "bright", "bella": "bright", "nicole": "soft", "sky": "warm",
+           "michael": "low", "puck": "playful", "amy": "bright", "hfc": "bright",
+           "ryan": "warm"}
 
 
 class VoiceError(Exception):
@@ -77,7 +66,7 @@ def clean(v: dict | None, min_pitch: float = 0.7) -> dict | None:
 
 
 def default_for(name: str) -> dict:
-    """A stable voice pick: sorted ids indexed by crc32(name) mod 9."""
+    """A stable voice pick: sorted ids indexed by crc32(name)."""
     ids = sorted(_IDS)
     return {"id": ids[zlib.crc32(name.encode("utf-8")) % len(ids)],
             "speed": 1.0, "pitch": 1.0}

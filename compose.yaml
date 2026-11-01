@@ -5,7 +5,7 @@
 #
 # You get the hub, the finding service (SAM 3.1) and a workshop with a
 # virtual desk: Pip the desk camera already lives here, and a desk lamp is
-# waiting in Add a robot. Add the house voice (Kokoro, two voices):
+# waiting in Add a robot. Add the house voice (Meta MMS-TTS):
 #
 #   docker compose --profile voice up --build
 #
@@ -57,7 +57,6 @@ services:
       HOUSE_SAM_URL: http://sam:8201
       HOUSE_VOICE_URL: http://voice:8202
       HOUSE_VOICE_OPTIONAL: "on"
-      HOUSE_VOICES: af_heart,am_puck
       HOUSE_EARS_URL: ${PONKI_EARS_URL:-off}   # e.g. http://host.docker.internal:8203
     volumes:
       - hub:/data/hub

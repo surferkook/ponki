@@ -4,6 +4,13 @@ His server (a separate app on the NUC, http://localhost:8091) already talks
 to the robot; we only call its HTTP API — never /api/chat or /api/listen
 (his server has its own brain), never raw motion or servo endpoints.
 
+His voice ("voice" in his config, or HOUSE_ROBOHON_VOICE):
+  house   (default) the house voice speaks for him, on the house speakers:
+          every model Ponki calls stays a Meta model
+  stream  the house voice, played on his own speaker: his server must offer
+          POST /api/play_wav (a WAV body); it says so plainly if it doesn't
+  own     his server's own voices (not Meta models: Kokoro, Piper, StyleTTS2)
+
 Run: python -u bodies/robohon/robohon_body.py [data/robots/robohon.json]
 """
 from __future__ import annotations
@@ -43,6 +50,15 @@ def pick_voice(text: str) -> str:
     if words and sum(w in DUTCH for w in words) / len(words) > 0.15:
         return "nl_NL-alex-medium"
     return "kokoro:af_heart"
+
+
+VOICE_MODES = ("house", "stream", "own")
+
+
+def voice_mode(config: dict) -> str:
+    """house (default), stream or own; anything else is house."""
+    mode = str(config.get("voice") or os.environ.get("HOUSE_ROBOHON_VOICE") or "house")
+    return mode if mode in VOICE_MODES else "house"
 
 
 def split_lines(text: str, limit: int = 300) -> list[str]:
@@ -89,6 +105,18 @@ class Robohon:
         resp = await self.client.get(f"{self.web}/api/gestures")
         resp.raise_for_status()
         return resp.json()
+
+    async def play_wav(self, wav: bytes) -> str:
+        """Play a house-voice clip on his own speaker (voice: stream)."""
+        async with self.speak_lock:
+            resp = await self.client.post(f"{self.web}/api/play_wav", content=wav,
+                                          headers={"Content-Type": "audio/wav"})
+            if resp.status_code in (404, 405):
+                raise ValueError("his server can't play house audio yet "
+                                 "(no /api/play_wav): set his voice to house")
+            resp.raise_for_status()
+            await asyncio.sleep(0.8 + wav_seconds(wav))  # he fetches it over Wi-Fi, then plays
+        return "played"
 
     async def speak(self, text: str) -> str:
         async with self.speak_lock:  # his server is single-robot, one rb.wav
@@ -203,14 +231,24 @@ def main() -> None:
         f"{g['key']}: {WALK_DESC if g['key'] == 'walk' else g.get('desc', '')}"
         for g in gestures if g.get("key"))
 
-    body = Body(name, config.get("description") or BODY, voice="speak",
+    mode = voice_mode(config)
+    body = Body(name, config.get("description") or BODY,
+                voice="speak" if mode == "own" else None,
+                voice_play="play" if mode == "stream" else None,
                 display_name=config.get("display_name") or "RoBoHoN",
                 personality=config.get("personality"))
 
-    @body.action("speak", "Say a line out loud.",
-                 {"text": {"type": "string"}}, sound=True)
-    async def speak(text: str):
-        return await robot.speak(text)
+    if mode == "own":
+        @body.action("speak", "Say a line out loud.",
+                     {"text": {"type": "string"}}, sound=True)
+        async def speak(text: str):
+            return await robot.speak(text)
+
+    if mode == "stream":
+        @body.action("play", "Play a house-voice clip on his own speaker.",
+                     {"url": {"type": "string"}}, sound=True)
+        async def play(url: str):
+            return await robot.play_wav(await body.house_clip(url))
 
     @body.action("gesture",
                  "Perform one body gesture (head/arms/legs/eye-lights) that fits "

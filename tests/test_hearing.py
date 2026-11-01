@@ -255,26 +255,23 @@ class EarsService(unittest.TestCase):
         self.assertEqual(len(calls), 2)  # one retry
         self.assertIn("429", str(ctx.exception))
 
-    def test_fallback_to_whisper(self) -> None:
+    def test_no_local_fallback(self) -> None:
         async def fake_post(wav_bytes, keywords, session_id):
             return SimpleNamespace(status_code=429, json=lambda: {},
                                    text="rate limited")
 
+        saved = ears._post_muse
+        self.addCleanup(setattr, ears, "_post_muse", saved)
         ears._post_muse = fake_post
-        state = dict(ears._whisper)
-        self.addCleanup(ears._whisper.update, state)
-        ears._whisper.update(state="ready", model=object())
-        self._whisper_fn = ears.whisper_transcribe
-        self.addCleanup(setattr, ears, "whisper_transcribe", self._whisper_fn)
-        ears.whisper_transcribe = lambda samples, rate: "hello from whisper"
         import base64
+        from fastapi import HTTPException
 
-        result = asyncio.run(ears.transcribe({
-            "audio": base64.b64encode(_wav()).decode(), "keywords": []}))
-        self.assertEqual(result["engine"], "whisper")
-        self.assertEqual(result["text"], "hello from whisper")
-        self.assertIn("429", result["fallback"])
-        self.assertEqual(result["billed_seconds"], 0)
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(ears.transcribe({
+                "audio": base64.b64encode(_wav()).decode(), "keywords": []}))
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertIn("429", ctx.exception.detail)
+        self.assertFalse(hasattr(ears, "whisper_transcribe"))
 
 
 class SentenceCutting(unittest.TestCase):

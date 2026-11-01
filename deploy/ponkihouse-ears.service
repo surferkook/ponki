@@ -1,5 +1,5 @@
 [Unit]
-Description=Ponkihouse ears — Muse Voice Transcribe with a whisper fallback
+Description=Ponkihouse ears — Muse Voice Transcribe
 After=network.target
 
 [Service]

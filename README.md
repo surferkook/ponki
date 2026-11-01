@@ -65,11 +65,13 @@ Click a picture to see it full size.
 | The builder that guides *Add a robot* | **Muse Wonder 1.0** | `hub/builder.py` |
 | Finding things in a photo (`locate`) and following them through a clip (`watch`) | **SAM 3.1** | `services/sam/` |
 | What the house mic hears | **Muse Voice Transcribe 1.0** | `services/ears/` |
+| The house voice, for robots without a speaker of their own | **MMS-TTS** (open weights, run locally) | `services/voice/` |
 | Robot portraits, and pictures a robot draws for you (`draw`) | **Muse Image 1.0** | `hub/portrait.py` |
 | Answers from a live web search (`look_up`) | **Muse Spark + Meta web search** | `hub/lookup.py` |
 
-Everything goes through Meta's Model API behind one provider interface. Each call is written to an API log
-with its tokens and cost, so you can see what every robot spends.
+Every model Ponki calls at runtime is a Meta model. Everything but the house voice goes through Meta's Model API
+behind one provider interface, and each call is written to an API log with its tokens and cost, so you can see
+what every robot spends.
 
 ## Who is what
 
@@ -233,7 +235,7 @@ The builder is a Muse Wonder agent with tools. The build sheet's buttons run the
 | **1 · Find** | USB + firmware probe | WS-Discovery + LAN sweep | asks the USB device who it is | its server answers |
 | **2 · Connect** | flash the pins firmware | log in; the password stays on the workshop | Wi-Fi form, our rover program uploaded, it calls in | nothing to do |
 | **3 · Plan** | parts; pins chosen by code | read from the camera, head measured | fixed | fixed |
-| **4 · Check** | each part, with wiring steps | photo, pan, tilt, home view | screen, sensors, drive, turn, eyes | voice, wave, photo |
+| **4 · Check** | each part, with wiring steps | photo, pan, tilt, home view | screen, sensors, drive, turn, eyes | wave, photo |
 | **5 · Soul** | birth: persona, portrait, voice | ← | ← | ← |
 
 A device the house has never seen can get a **builder-written family**. The draft is reviewed without running
@@ -247,7 +249,7 @@ needs your approval on the build sheet.
 | **Buddy** | Arduino Uno on a breadboard: mood light, flag arm, piezo, light sensor | chirps, with his words through the house speaker |
 | **Keiki** | Tapo C225 camera on a 328° pan / 96° tilt head, looking down the table | the house speaker |
 | **Vroom-Vroom** | Makeblock mBot2: drives exact centimetres, turns exact degrees, screen face, distance sensor | beeps and the house speaker |
-| **RoBoHoN** | Sharp's 20 cm humanoid robot phone: gestures, LED eyes, forehead camera | his own speaker |
+| **RoBoHoN** | Sharp's 20 cm humanoid robot phone: gestures, LED eyes, forehead camera | the house speaker |
 
 ## Safe by design
 
@@ -270,7 +272,7 @@ bodies/workshop/    the workshop fixture, drafting and the sandbox
 bodies/<family>/    each family's driver (bodies/desk: the virtual desk)
 demo/               the house a first run starts with: Pip and its workshop config
 firmware/pins/      the one generic Arduino sketch
-services/           sam (SAM 3.1), voice (Kokoro + Piper), ears (Muse Voice Transcribe)
+services/           sam (SAM 3.1), voice (MMS-TTS), ears (Muse Voice Transcribe)
 deploy/             systemd units, a clone-anywhere installer and the container's entrypoint
 compose.yaml        Ponki in a box: hub, finding, a workshop with the virtual desk, optional voice
 tools/              manual checks and helpers: the voice check, giving a stand-in workshop an account
@@ -299,7 +301,7 @@ Open **http://localhost:8200**. The house already has someone in it:
 4. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
    call to Muse and SAM.
 
-To hear the robots, add the house voice (Kokoro, two voices, about 2 GB more to build) and switch on **Hear it here**
+To hear the robots, add the house voice (Meta MMS-TTS, about 2 GB more to build) and switch on **Hear it here**
 in the sidebar:
 
 ```bash
@@ -342,7 +344,7 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 ```
 
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 229 tests, about 35 s: no hardware, network or model calls
+.venv/bin/python -m unittest discover -s tests    # 239 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built
@@ -350,10 +352,13 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 Ponki was written by **Muse Code** from eleven short specs, one working step at a time, during the hackathon.
 The commit history shows it step by step.
 
-Thanks to the projects it stands on: FastAPI, Kokoro, Piper, faster-whisper, Makeblock's CyberPi, and Sharp's RoBoHoN.
+Thanks to the projects it stands on: FastAPI, Hugging Face Transformers, Makeblock's CyberPi, and Sharp's RoBoHoN.
 
 ## License
 
 [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). You may use, change and share Ponki, commercially too,
 as long as you keep the notices and say what you changed. The license doesn't cover the name Ponki: a fork needs a
 name of its own. Releases up to and including v1.0.0-rc.3 were published under the MIT License.
+
+The optional house voice uses Meta's MMS-TTS model, which is licensed for non-commercial use only
+(CC-BY-NC 4.0), and so is the `ponki-voice` image that contains it.

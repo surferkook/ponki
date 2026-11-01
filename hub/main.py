@@ -44,17 +44,6 @@ NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 CSP = {"Content-Security-Policy": "default-src 'none'; sandbox"}
 STATIC = Path(__file__).parent / "static" / "index.html"
 
-VOICES = [
-    {"id": "heart", "label": "Heart (Kokoro): warm, friendly woman"},
-    {"id": "bella", "label": "Bella (Kokoro): bright, lively woman"},
-    {"id": "nicole", "label": "Nicole (Kokoro): soft, breathy, whispery woman"},
-    {"id": "sky", "label": "Sky (Kokoro): light, young woman"},
-    {"id": "michael", "label": "Michael (Kokoro): warm, mature man"},
-    {"id": "puck", "label": "Puck (Kokoro): playful, cheeky man"},
-    {"id": "amy", "label": "Amy (Piper): warm, clear woman"},
-    {"id": "hfc", "label": "HFC (Piper): bright, crisp woman"},
-    {"id": "ryan", "label": "Ryan (Piper): clear, friendly man"},
-]
 
 
 def _preview_wav(pitch: float = 1.0, speed: float = 1.0) -> bytes:
