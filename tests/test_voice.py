@@ -172,6 +172,42 @@ class SpeakFlow(unittest.TestCase):
             asyncio.run(house.speak("robo", "I have my own speaker"))
             self.assertEqual(called, [])
 
+    def test_voice_play_goes_to_the_body_not_the_speakers(self) -> None:
+        # a body with a speaker of its own plays the house voice itself
+        with tempfile.TemporaryDirectory() as tmp:
+            house = self._house(tmp)
+            self._speaker(house)
+            man = {"name": "robo", "voice_play": "play", "actions": {"play": {}}}
+            house.manifests["robo"] = man
+            house.bodies["robo"] = Link(ws=object(), manifest=man, state={})
+
+            async def fake_synth(text, v):
+                return _wav_ms(), 10
+
+            voice_mod.synth = fake_synth
+            asyncio.run(house.speak("robo", "hello from my own speaker"))
+            plays = [a for a in self.acts if a[1] == "play"]
+            self.assertEqual(len(plays), 1)
+            self.assertEqual(plays[0][0], "robo")  # not "@jbl"
+            self.assertTrue(plays[0][2]["url"].startswith("/api/voice/"))
+
+    def test_voice_play_offline_says_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            house = self._house(tmp)
+            self._speaker(house)
+            house.manifests["robo"] = {"name": "robo", "voice_play": "play",
+                                       "actions": {"play": {}}}
+            called = []
+
+            async def fake_synth(text, v):
+                called.append(text)
+                return _wav_ms(), 10
+
+            voice_mod.synth = fake_synth
+            asyncio.run(house.speak("robo", "nobody hears this"))
+            self.assertEqual(called, [])
+            self.assertEqual(self.acts, [])
+
     def test_voice_error_is_kept(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             house = self._house(tmp)

@@ -320,7 +320,7 @@ class Soul:
         if voice_action and manifest.get("voice_style") == "chirps":
             spoken = ("your final reply each turn is spoken out loud by the house "
                       "speakers in your own voice while your body chirps along")
-        elif voice_action:
+        elif voice_action or manifest.get("voice_play"):
             spoken = ("your final reply each turn is spoken out loud through your "
                       "body's speaker")
         else:
@@ -367,7 +367,7 @@ class Soul:
         tools: list[ToolSpec] = []
         for name in sorted(actions):
             spec = actions[name] or {}
-            if name == manifest.get("voice") or spec.get("hidden"):
+            if name in (manifest.get("voice"), manifest.get("voice_play")) or spec.get("hidden"):
                 continue
             if not _NAME_OK.match(name) or name == "ask_robot":
                 continue

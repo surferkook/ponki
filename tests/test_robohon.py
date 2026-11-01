@@ -125,6 +125,16 @@ class Voices(unittest.TestCase):
         self.assertGreater(len(pieces), 1)
 
 
+class VoiceModes(unittest.TestCase):
+    def test_house_is_the_default(self) -> None:
+        saved = os.environ.pop("HOUSE_ROBOHON_VOICE", None)
+        self.addCleanup(lambda: saved is not None and os.environ.__setitem__("HOUSE_ROBOHON_VOICE", saved))
+        self.assertEqual(driver.voice_mode({}), "house")
+        self.assertEqual(driver.voice_mode({"voice": "own"}), "own")
+        self.assertEqual(driver.voice_mode({"voice": "stream"}), "stream")
+        self.assertEqual(driver.voice_mode({"voice": "loud"}), "house")
+
+
 class Driver(unittest.TestCase):
     def setUp(self) -> None:
         self.fake = FakeServer()
@@ -187,7 +197,11 @@ class Family(unittest.TestCase):
         device = family.EXAMPLE["device"]
         self.assertEqual(device["gestures"], 56)
         kinds = list(family.checks({}, device))
-        self.assertEqual(kinds, ["voice", "gesture", "camera"])
+        self.assertEqual(kinds, ["gesture", "camera"])  # the house speaks for him
+        self.assertEqual(list(family.checks({"voice": "own"}, device)),
+                         ["voice", "gesture", "camera"])
+        self.assertIn("MMS-TTS", family.body({}, device)["rows"][0][1])
+        self.assertIn("not Meta", family.body({"voice": "own"}, device)["rows"][0][1])
         self.assertEqual(family.problems({}), ([], []))
         body = family.body({}, device)
         self.assertTrue(any("56 gestures" in row[1] for row in body["rows"]))

@@ -101,6 +101,19 @@ playful, soft) are presets of its pitch and pace. The house hears people
 through a mic fixture and the ears (Muse Voice Transcribe, which needs
 `META_API_KEY`; there is no offline fallback).
 
+A robot with a speaker of its own can speak in the house voice too: its body
+declares `voice_play`, the name of an action that takes a clip's `url`
+(`/api/voice/<n>.wav`), fetches it with `body.house_clip(url)` and plays it.
+The house then sends that robot's lines to its own speaker instead of the
+house speakers. RoBoHoN's `voice` setting (in his config, or
+`HOUSE_ROBOHON_VOICE`) picks one of three:
+
+| `voice` | He speaks with | Notes |
+|---|---|---|
+| `house` (default) | the house voice, on the house speakers | every model stays a Meta model |
+| `stream` | the house voice, on his own speaker | needs his server to offer `POST /api/play_wav` |
+| `own` | his server's own voices | Kokoro, Piper, StyleTTS2: not Meta models |
+
 ```bash
 python3 -m venv services/voice/.venv
 services/voice/.venv/bin/pip install -r services/voice/requirements.txt

@@ -117,10 +117,22 @@ def problems(config: dict):
     return ([], [])
 
 
+VOICE_ROWS = {
+    "house": "the house voice (Meta MMS-TTS), on the house speakers",
+    "stream": "the house voice (Meta MMS-TTS), on his own speaker",
+    "own": "his own speaker and his server's own voices (not Meta models)",
+}
+
+
+def _voice(config: dict) -> str:
+    mode = str(config.get("voice") or "house")
+    return mode if mode in VOICE_ROWS else "house"
+
+
 def body(config: dict, device: dict) -> dict:
     n = device.get("gestures", 0)
     return {"head": ["Ability", "Details"], "rows": [
-        ["voice", "his own speaker and his own voices"],
+        ["voice", VOICE_ROWS[_voice(config)]],
         ["gestures", f"{n} gestures: head, arms, legs, LED eyes"],
         ["camera", "in his forehead"],
         ["pose", "standing / sitting / docked in the cradle"],
@@ -128,11 +140,14 @@ def body(config: dict, device: dict) -> dict:
 
 
 def checks(config: dict, device: dict) -> dict:
-    return {
-        "voice": {"title": "voice", "steps": [], "sig": "1"},
-        "gesture": {"title": "gesture", "steps": [], "sig": "1"},
-        "camera": {"title": "camera", "steps": [], "sig": "1"},
-    }
+    # his own voice is checked only when he speaks with it; the house voice
+    # is checked by the house (System → services)
+    out = {}
+    if _voice(config) == "own":
+        out["voice"] = {"title": "voice", "steps": [], "sig": "1"}
+    out["gesture"] = {"title": "gesture", "steps": [], "sig": "1"}
+    out["camera"] = {"title": "camera", "steps": [], "sig": "1"}
+    return out
 
 
 async def check(device: dict, config: dict, check_id: str, config_path=None) -> dict:

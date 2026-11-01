@@ -235,7 +235,7 @@ The builder is a Muse Wonder agent with tools. The build sheet's buttons run the
 | **1 · Find** | USB + firmware probe | WS-Discovery + LAN sweep | asks the USB device who it is | its server answers |
 | **2 · Connect** | flash the pins firmware | log in; the password stays on the workshop | Wi-Fi form, our rover program uploaded, it calls in | nothing to do |
 | **3 · Plan** | parts; pins chosen by code | read from the camera, head measured | fixed | fixed |
-| **4 · Check** | each part, with wiring steps | photo, pan, tilt, home view | screen, sensors, drive, turn, eyes | voice, wave, photo |
+| **4 · Check** | each part, with wiring steps | photo, pan, tilt, home view | screen, sensors, drive, turn, eyes | wave, photo |
 | **5 · Soul** | birth: persona, portrait, voice | ← | ← | ← |
 
 A device the house has never seen can get a **builder-written family**. The draft is reviewed without running
@@ -249,7 +249,7 @@ needs your approval on the build sheet.
 | **Buddy** | Arduino Uno on a breadboard: mood light, flag arm, piezo, light sensor | chirps, with his words through the house speaker |
 | **Keiki** | Tapo C225 camera on a 328° pan / 96° tilt head, looking down the table | the house speaker |
 | **Vroom-Vroom** | Makeblock mBot2: drives exact centimetres, turns exact degrees, screen face, distance sensor | beeps and the house speaker |
-| **RoBoHoN** | Sharp's 20 cm humanoid robot phone: gestures, LED eyes, forehead camera | his own speaker |
+| **RoBoHoN** | Sharp's 20 cm humanoid robot phone: gestures, LED eyes, forehead camera | the house speaker |
 
 ## Safe by design
 
@@ -344,7 +344,7 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 ```
 
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 236 tests, about 35 s: no hardware, network or model calls
+.venv/bin/python -m unittest discover -s tests    # 239 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built

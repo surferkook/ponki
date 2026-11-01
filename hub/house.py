@@ -704,7 +704,7 @@ class House:
         actions = link.manifest.get("actions") or {}
         if action not in actions:
             return {"ok": False, "text": f"this body has no action '{action}'", "data": None}
-        is_voice = action == link.manifest.get("voice")
+        is_voice = action in (link.manifest.get("voice"), link.manifest.get("voice_play"))
         is_sound = not is_fixture and not is_voice and _is_sound(link.manifest, action)
         if not is_fixture:
             if not is_voice and action != "stop":
@@ -1532,10 +1532,14 @@ class House:
             has_voice = bool(man.get("voice"))
             own = man.get("voice") if rid in self.bodies else None
             chirps = man.get("voice_style") == "chirps"
+            # voice_play: a body with a speaker of its own that plays the
+            # house voice (its own voice, in the house's Meta voice) on it
+            streams = bool(man.get("voice_play"))
+            play = man.get("voice_play") if rid in self.bodies else None
             clip_task = None
             # The clip is made before the lock, on purpose: synthesis runs
             # while the previous speaker is still talking.
-            if not has_voice or chirps:
+            if (not has_voice and not streams) or chirps or play:
                 clip_task = asyncio.ensure_future(self._make_clip(rid, text))
             # a robot with its own speaker, offline, says nothing: the house
             # voice doesn't stand in for a speaker that exists
@@ -1558,7 +1562,14 @@ class House:
                         clip = await clip_task
                     except Exception:
                         clip = None
-                if clip:
+                if clip and play:
+                    _n, url, ms = clip
+                    self.emit("voice", rid, url=url, ms=ms, text=text)
+                    try:  # the body plays it and answers when it's done
+                        await self.act(rid, play, {"url": url}, timeout=60)
+                    except Exception:
+                        pass  # a voice error leaves the robot silent; the turn succeeds
+                elif clip:
                     _n, url, ms = clip
                     await self._play_clip(rid, url, ms, text)
                 self._voice_spans.append((started, time.time(), rid))
