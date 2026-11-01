@@ -1,6 +1,7 @@
 # Release: tag vX.Y.Z and the images are built natively on amd64 and arm64,
 # published to GitHub's container registry as one multi-arch tag each
-# (with provenance and an SBOM), and a GitHub Release is written.
+# (with provenance and an SBOM), pulled back and run on both without a login,
+# and only then is a GitHub Release written.
 #
 #   ghcr.io/surferkook/ponki        hub, finding, workshop
 #   ghcr.io/surferkook/ponki-voice  the house voice (Kokoro, two voices)
@@ -135,9 +136,56 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
         run: docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
 
+  verify:
+    # The published images, met the way a stranger meets them: no login,
+    # pulled by tag on each CPU family, nothing built, and the house checked
+    # with the voice on. A private package or a broken image stops the
+    # release here, before anyone else finds it.
+    name: Pull and run as a stranger (${{ matrix.arch }})
+    needs: publish
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - name: The release notes' steps
+        env:
+          OWNER: ${{ github.repository_owner }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker logout ghcr.io || true
+          cp .env.example .env
+          echo "PONKI_VERSION=${TAG#v}" >> .env
+          docker compose --profile voice pull
+          for img in ponki ponki-voice; do
+            got=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "ghcr.io/$OWNER/$img:${TAG#v}")
+            echo "$img:${TAG#v}  $got"
+            test "$got" = "linux/$ARCH"
+          done
+      - name: Start (nothing is built) and check
+        run: |
+          docker compose --profile voice up -d --no-build
+          python3 tools/smoke.py --wait 180 --voice
+      - name: Logs
+        if: always()
+        run: docker compose --profile voice logs --no-color --timestamps | tail -n 200
+      - name: Clean up
+        if: always()
+        run: docker compose --profile voice down -v
+
   release:
     name: GitHub Release
-    needs: publish
+    needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
