@@ -262,20 +262,6 @@ needs your approval on the build sheet.
   approved by a person.
 - **Pinned dependencies** from canonical sources only.
 
-## Limits
-
-Where Ponki stops today:
-
-- **No login yet.** Anyone on your network or tailnet can open the web UI, so keep the hub off the internet.
-- **Robots take their time.** A spoken reply takes a few seconds, and a guided drive across the table about a
-  minute: every step is a model call and a photo.
-- **Guiding is approximate.** The rover usually ends up within 10–20 cm of the goal. Its distance sensor sees
-  only what's straight ahead, not what's beside it.
-- **One person per house.** The robots know one human by name (`HOUSE_HUMAN`).
-- **Only networked robots move.** A robot on a cable waits for its machine, and the hub itself has no stand-in.
-- **Thinking needs the cloud.** Souls, finding and the builder run on Meta's Model API. The house voice runs
-  locally, and hearing falls back to a local Whisper.
-
 ## Repository
 
 ```
