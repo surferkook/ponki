@@ -26,4 +26,5 @@ RUN useradd --create-home --uid 1000 ponki \
  && chmod +x deploy/docker/entrypoint.sh
 USER ponki
 ENTRYPOINT ["/ponki/deploy/docker/entrypoint.sh"]
-CMD ["uvicorn", "hub.main:app", "--host", "0.0.0.0", "--port", "8200"]
+EXPOSE 8200 8210
+CMD ["python", "-m", "hub.serve"]

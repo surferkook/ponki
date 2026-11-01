@@ -101,6 +101,19 @@ jobs:
         run: |
           docker compose up -d
           python3 tools/smoke.py --wait 180 $([ "$E2E" = true ] && echo --e2e)
+      - name: A workshop on another machine, through the door for robots
+        # a second workshop container stands in for a Pi: it dials the hub's
+        # body port (:8210) the way a workshop elsewhere would
+        run: |
+          token=$(sed -n 's/^HOUSE_TOKEN=//p' .env)
+          docker run -d --name door-workshop --network host --user ponki \
+            -e HOUSE_HUB=ws://127.0.0.1:8210 -e HOUSE_TOKEN="$token" \
+            -e HOUSE_WORKSHOP_NAME=door-workshop -e HOUSE_WORKSHOP_FAMILIES=desk -e HOUSE_DESK=off \
+            -e HOUSE_WORKSHOP_ROBOTS=/tmp/ws/robots -e HOUSE_WORKSHOP_SECRETS=/tmp/ws/secrets \
+            --entrypoint python ghcr.io/surferkook/ponki:latest -u bodies/workshop/workshop.py
+          python3 tools/smoke.py --wait 60 --workshop door-workshop
+          docker logs door-workshop | tail -n 20
+          docker rm -f door-workshop
       - name: Add the voice
         run: |
           docker compose --profile voice up -d

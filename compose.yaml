@@ -11,6 +11,12 @@
 #
 # Everything the house remembers is in two volumes; `docker compose down -v`
 # forgets it all and the next start is a first run again.
+#
+# Workshops on other machines (a Pi with an Arduino, a laptop by the rover)
+# dial in on the door for robots, :8210, which answers nothing but bodies.
+# Open it with PONKI_BODY_BIND=0.0.0.0 and a long random HOUSE_TOKEN in .env;
+# see "Workshops on other machines" in docs/SETUP.md. Settings for this file
+# start with PONKI_ and go in .env, so this file never needs editing.
 
 name: ponki
 
@@ -19,15 +25,32 @@ x-ponki: &ponki
   image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-latest}
   env_file: .env                  # cp .env.example .env first
   restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: "3"}
 
 services:
   hub:
     <<: *ponki
-    command: ["uvicorn", "hub.main:app", "--host", "0.0.0.0", "--port", "8200"]
+    command: ["python", "-m", "hub.serve"]
     ports:
-      - "127.0.0.1:8200:8200"     # this machine only: the web UI has no login
+      # the house and its web UI: this machine only unless you say otherwise
+      # (there's no login; a LAN you trust or a tailnet at most)
+      - "${PONKI_BIND:-127.0.0.1}:${PONKI_PORT:-8200}:8200"
+      # the door for robots: bodies and workshops only, token-checked
+      - "${PONKI_BODY_BIND:-127.0.0.1}:${PONKI_BODY_PORT:-8210}:8210"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # sidecars run on this machine itself, on Linux too
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/api/info', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     environment:
       HOUSE_TOKEN: ${HOUSE_TOKEN:-ponki-in-a-box}
+      HOUSE_BODY_PORT: "8210"
+      PONKI_BODY_BIND: ${PONKI_BODY_BIND:-127.0.0.1}
       HOUSE_DATA_DIR: /data/hub
       PONKI_SEED: /ponki/demo/hub
       PONKI_SEED_INTO: /data/hub
@@ -35,7 +58,7 @@ services:
       HOUSE_VOICE_URL: http://voice:8202
       HOUSE_VOICE_OPTIONAL: "on"
       HOUSE_VOICES: af_heart,am_puck
-      HOUSE_EARS_URL: "off"
+      HOUSE_EARS_URL: ${PONKI_EARS_URL:-off}   # e.g. http://host.docker.internal:8203
     volumes:
       - hub:/data/hub
 
@@ -43,11 +66,18 @@ services:
     <<: *ponki
     working_dir: /ponki/services/sam
     command: ["uvicorn", "sam_server:app", "--host", "0.0.0.0", "--port", "8201"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8201/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
 
   workshop:
     <<: *ponki
     command: ["python", "-u", "bodies/workshop/workshop.py"]
-    depends_on: [hub]
+    depends_on:
+      hub: {condition: service_healthy}
     environment:
       HOUSE_TOKEN: ${HOUSE_TOKEN:-ponki-in-a-box}
       HOUSE_HUB: ws://hub:8200
@@ -67,6 +97,15 @@ services:
     build: services/voice
     image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-latest}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8202/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
 
 volumes:
   hub:
