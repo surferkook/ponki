@@ -1,6 +1,6 @@
 <h1 align="center">Ponki</h1>
 <p align="center"><b>A home for robot souls.</b></p>
-<p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, and Ponki in a box on amd64 and arm64"></a></p>
+<p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, Ponki in a box on amd64 and arm64, and without Docker on Linux and macOS"></a></p>
 
 <p align="center">
   <img src="docs/media/video.jpg" width="860" alt="RoBoHoN on the table: I used to be a phone, but now I have a soul">
@@ -275,7 +275,9 @@ firmware/pins/      the one generic Arduino sketch
 services/           sam (SAM 3.1), voice (MMS-TTS), ears (Muse Voice Transcribe)
 deploy/             systemd units, a clone-anywhere installer and the container's entrypoint
 compose.yaml        Ponki in a box: hub, finding, a workshop with the virtual desk, optional voice
-tools/              manual checks and helpers: the voice check, giving a stand-in workshop an account
+setup.sh            Ponki without Docker: the venvs, .env and its token, the demo house; --workshop for one machine
+tools/              start.py (the house without Docker), smoke.py (what a newcomer should find), the voice check,
+                    giving a stand-in workshop an account
 tests/              standard library only: no hardware, no network, no model calls
 ```
 
@@ -290,7 +292,8 @@ Linux) and a Meta Model API key.
 ```bash
 git clone https://github.com/surferkook/ponki.git && cd ponki
 cp .env.example .env          # put your key in META_API_KEY, and your first name in HOUSE_HUMAN
-docker compose up --build     # the first build takes a few minutes
+docker compose pull           # the latest release's images, about 0.5 GB
+docker compose up
 ```
 
 Open **http://localhost:8200**. The house already has someone in it:
@@ -304,14 +307,16 @@ Open **http://localhost:8200**. The house already has someone in it:
 4. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
    call to Muse and SAM.
 
-To hear the robots, add the house voice (Meta MMS-TTS, about 2 GB more to build) and switch on **Hear it here**
-in the sidebar:
+To hear the robots, add the house voice (Meta MMS-TTS, about 1.4 GB more) and switch on **Hear it here** in the
+sidebar:
 
 ```bash
-docker compose --profile voice up --build
+docker compose --profile voice pull
+docker compose --profile voice up
 ```
 
-`docker compose down -v` forgets everything, and the next start is a first run again.
+`docker compose down -v` forgets everything, and the next start is a first run again. To build the images from
+your checkout instead of pulling them, add `--build` to `up`.
 
 The virtual desk exists so you can try the house without hardware. Real devices need a workshop on the machine
 they're plugged into; see [Run it on your own machines](#run-it-on-your-own-machines). The house in Docker and
@@ -340,14 +345,15 @@ A machine with devices joins a house running elsewhere (in Docker or natively) a
 .venv/bin/python tools/start.py --workshop
 ```
 
-The house lets it in with `tools/start.py --lan` (in Docker: `PONKI_BODY_BIND=0.0.0.0` in `.env`), which opens the
-door for robots on :8210 to your network. Each family's own setup (an Arduino's firmware, a camera's account), the
+The house lets it in with `tools/start.py --lan`, which opens the door for robots on :8210 to your network. In
+Docker, put `PONKI_BODY_BIND=0.0.0.0` and a long random `HOUSE_TOKEN` in `.env` (`python3 -c 'import secrets;
+print(secrets.token_urlsafe(32))'` makes one); the hub won't open the door with the example token. Each family's own setup (an Arduino's firmware, a camera's account), the
 voice, the ears and the systemd units are in [docs/SETUP.md](docs/SETUP.md).
 
 The smallest body is a fake robot that dials in by itself, with no workshop:
 
 ```bash
-HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/sdk/example.py
+HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<the HOUSE_TOKEN in .env> .venv/bin/python bodies/sdk/example.py
 ```
 
 ```bash

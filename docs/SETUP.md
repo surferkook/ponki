@@ -6,8 +6,11 @@ services. The [README](../README.md) has the overview.
 
 ## With Docker
 
-`docker compose up --build` runs the hub, the finding service and a workshop
-with the virtual desk, and starts the house with Pip in it (see the README).
+`docker compose pull` then `docker compose up` runs the hub, the finding
+service and a workshop with the virtual desk, and starts the house with Pip
+in it (see the README). The images are the release `compose.yaml` names
+(`PONKI_VERSION` in `.env` picks another); `up --build` builds them from
+your checkout instead.
 What compose sets up, and where:
 
 | Service | What it is | Settings that matter |
