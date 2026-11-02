@@ -1,13 +1,19 @@
 # Ponki in a box.
 #
 #   cp .env.example .env              # put your META_API_KEY in it
-#   docker compose up --build         # then open http://localhost:8200
+#   docker compose pull               # this release's images (amd64 or arm64)
+#   docker compose up                 # then open http://localhost:8200
 #
 # You get the hub, the finding service (SAM 3.1) and a workshop with a
 # virtual desk: Pip the desk camera already lives here, and a desk lamp is
 # waiting in Add a robot. Add the house voice (Meta MMS-TTS):
 #
-#   docker compose --profile voice up --build
+#   docker compose --profile voice pull
+#   docker compose --profile voice up
+#
+# The images are the release this checkout names below (PONKI_VERSION in
+# .env picks another); `docker compose up --build` builds them from this
+# checkout instead.
 #
 # Everything the house remembers is in two volumes; `docker compose down -v`
 # forgets it all and the next start is a first run again.
@@ -22,7 +28,7 @@ name: ponki
 
 x-ponki: &ponki
   build: .
-  image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-latest}
+  image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-1.0.0-rc.5}
   env_file: .env                  # cp .env.example .env first
   restart: unless-stopped
   logging:
@@ -94,7 +100,7 @@ services:
   voice:
     profiles: [voice]
     build: services/voice
-    image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-latest}
+    image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-1.0.0-rc.5}
     restart: unless-stopped
     logging:
       driver: json-file

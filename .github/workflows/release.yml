@@ -29,8 +29,27 @@ env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
+  names:
+    # `docker compose pull` gets the images compose.yaml names, so a release
+    # whose checkout names another version would hand people the wrong ones
+    name: compose.yaml names this release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - name: Check
+        run: |
+          for img in ponki ponki-voice; do
+            grep -qF "image: ghcr.io/surferkook/$img:\${PONKI_VERSION:-${TAG#v}}" compose.yaml \
+              || { echo "compose.yaml doesn't default $img to ${TAG#v}: bump it, then tag"; exit 1; }
+          done
+
   build:
     name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    needs: names
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -208,8 +227,7 @@ jobs:
           \`\`\`bash
           git clone --branch $TAG https://github.com/$REPO.git && cd ponki
           cp .env.example .env                       # put your key in META_API_KEY
-          echo "PONKI_VERSION=${TAG#v}" >> .env      # use this release's images
-          docker compose pull && docker compose up
+          docker compose pull && docker compose up   # this release's images
           \`\`\`
 
           Open http://localhost:8200. Pip, the desk camera, already lives there, and a desk lamp is
