@@ -281,6 +281,9 @@ tests/              standard library only: no hardware, no network, no model cal
 
 ## Try it
 
+**Docker, a virtual desk, no hardware: the quickest way to meet the house.** To run it with real robots, see
+[Run it on your own machines](#run-it-on-your-own-machines).
+
 All you need is Docker (Docker Desktop on a Mac, Apple silicon or Intel; Docker Engine with the Compose plugin on
 Linux) and a Meta Model API key.
 
@@ -317,25 +320,29 @@ workshops on other machines mix: they dial in on a port that answers only robots
 
 ## Run it on your own machines
 
-Without Docker, on Python 3.10 or 3.11:
+**For real robots: the house and its workshops run natively, next to the hardware**, because USB and network
+discovery don't reach into a container. macOS or Linux, Python 3.10 to 3.13, and Node.js 20.17+ for finding:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env          # set META_API_KEY and HOUSE_TOKEN
-.venv/bin/uvicorn hub.main:app --host 0.0.0.0 --port 8200
+git clone https://github.com/surferkook/ponki.git && cd ponki
+./setup.sh                        # asks for your API key and first name; Enter skips either
+.venv/bin/python tools/start.py   # the house; Ctrl-C stops it
 ```
 
-Open http://localhost:8200/. Then, in another shell, a workshop finds devices and runs them. This one finds the
-virtual desk:
+`setup.sh` makes the virtual environments, creates `.env` (and never overwrites one), gives the house a long random
+`HOUSE_TOKEN` and moves Pip in. Running it again is safe. Open http://localhost:8200: it's the same house as in
+Docker, and its workshop also looks for real devices: Arduinos on USB, cameras and RoBoHoN on the network, the rover.
+
+A machine with devices joins a house running elsewhere (in Docker or natively) as a workshop:
 
 ```bash
-HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> HOUSE_WORKSHOP_FAMILIES=desk HOUSE_DESK=on \
-  .venv/bin/python bodies/workshop/workshop.py
+./setup.sh --workshop             # asks where the house is and for its HOUSE_TOKEN
+.venv/bin/python tools/start.py --workshop
 ```
 
-Use **Add a robot** to give the desk camera or the lamp a soul. Without `HOUSE_WORKSHOP_FAMILIES` and `HOUSE_DESK`,
-a workshop looks for real devices: Arduinos on USB, cameras and RoBoHoN on the network, the rover. The finding
-service (SAM 3.1), the voice, the ears, each family's setup and the systemd units are in [docs/SETUP.md](docs/SETUP.md).
+The house lets it in with `tools/start.py --lan` (in Docker: `PONKI_BODY_BIND=0.0.0.0` in `.env`), which opens the
+door for robots on :8210 to your network. Each family's own setup (an Arduino's firmware, a camera's account), the
+voice, the ears and the systemd units are in [docs/SETUP.md](docs/SETUP.md).
 
 The smallest body is a fake robot that dials in by itself, with no workshop:
 
@@ -344,7 +351,7 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/s
 ```
 
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 239 tests, about 35 s: no hardware, network or model calls
+.venv/bin/python -m unittest discover -s tests    # 247 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built

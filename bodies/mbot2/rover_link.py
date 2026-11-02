@@ -192,6 +192,7 @@ class RoverLink:
                         fut.set_exception(Offline("the rover went offline"))
                 self._pending.clear()
                 self._notify(False, self.hello)
+            writer.close()  # our end too: Python 3.12+ waits for it when the server closes
 
     async def _ping_loop(self, writer: asyncio.StreamWriter) -> None:
         while True:
