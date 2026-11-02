@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,6 +58,74 @@ jobs:
       - name: Every family meets the family contract
         working-directory: bodies
         run: python -m families.conformance
+
+  native:
+    # ./setup.sh and tools/start.py the way someone without Docker meets
+    # them: Linux with the system's own Python (3.12 on Ubuntu 24.04), and
+    # macOS on Apple silicon and Intel. A house opens its door for robots,
+    # and a second copy set up with --workshop joins it through that door.
+    name: Without Docker (${{ matrix.name }})
+    needs: tests
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux amd64
+            runner: ubuntu-24.04
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+          - name: macOS Apple silicon
+            runner: macos-15
+            python: "3.13"
+          - name: macOS Intel
+            runner: macos-15-intel
+            python: "3.11"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20.20.2"
+      - name: ./setup.sh
+        run: ./setup.sh --yes
+      - name: Again, and it keeps the house's token
+        run: |
+          before=$(sed -n 's/^HOUSE_TOKEN=//p' .env)
+          ./setup.sh --yes
+          after=$(sed -n 's/^HOUSE_TOKEN=//p' .env)
+          test "$before" = "$after"
+          test "${#after}" -eq 43
+          python3 -c 'import os, stat; assert stat.S_IMODE(os.stat(".env").st_mode) == 0o600'
+          test -e data/registry.json
+      - name: The house, with its door for robots open
+        run: |
+          .venv/bin/python tools/start.py --lan > house.log 2>&1 &
+          python3 tools/smoke.py --wait 120
+      - name: A workshop set up on its own, through the door
+        run: |
+          token=$(sed -n 's/^HOUSE_TOKEN=//p' .env)
+          mkdir "$RUNNER_TEMP/far" && git archive HEAD | tar -x -C "$RUNNER_TEMP/far"
+          cd "$RUNNER_TEMP/far"
+          ./setup.sh --workshop --yes
+          HOUSE_HUB=ws://127.0.0.1:8210 HOUSE_TOKEN="$token" HOUSE_WORKSHOP_NAME=far-workshop \
+            HOUSE_WORKSHOP_FAMILIES=desk .venv/bin/python tools/start.py --workshop > far.log 2>&1 &
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/smoke.py --wait 60 --workshop far-workshop
+      - name: Ctrl-C stops everything
+        run: |
+          pkill -INT -f tools/start.py
+          for _ in $(seq 20); do pgrep -f 'hub.serve|workshop.py|sam_server' >/dev/null || exit 0; sleep 1; done
+          pgrep -fl 'hub.serve|workshop.py|sam_server'; exit 1
+      - name: Logs
+        if: always()
+        run: tail -n 100 house.log "$RUNNER_TEMP/far/far.log" || true
 
   docker:
     name: Docker (${{ matrix.arch }})

@@ -82,6 +82,28 @@ def _device_paths(device) -> list:
     return paths
 
 
+def link_hops(path) -> list:
+    """Every symlink met while resolving *path*, in order: (link, its target as written)."""
+    hops: list = []
+    todo = os.path.abspath(str(path))
+    for _ in range(40):  # a symlink loop just stops here
+        parts = Path(todo).parts
+        current = Path(parts[0])
+        for index, part in enumerate(parts[1:], 1):
+            step = current / part
+            if step.is_symlink():
+                target = os.readlink(step)
+                if (str(step), target) not in hops:
+                    hops.append((str(step), target))
+                resolved = Path(target) if os.path.isabs(target) else step.parent / target
+                todo = os.path.normpath(str(resolved.joinpath(*parts[index + 1:])))
+                break
+            current = step
+        else:
+            return hops
+    return hops
+
+
 def argv(cmd, read=[], device=None, net=False, env={}) -> list:
     """The bubblewrap command list running *cmd* in the sandbox."""
     bwrap = shutil.which("bwrap") or shutil.which("bubblewrap")
@@ -124,6 +146,14 @@ def argv(cmd, read=[], device=None, net=False, env={}) -> list:
     ro_bind(BODIES)
     if sys.prefix:
         ro_bind(sys.prefix)
+    # A venv's python is a symlink to the real one, which may live outside
+    # /usr (pyenv, uv, Homebrew), behind more symlinks: recreate each link
+    # that isn't already inside a bind, then bind the real install.
+    for link, target in link_hops(sys.executable):
+        if not any(link == b or link.startswith(b.rstrip("/") + "/") for b in bound):
+            args.extend(["--symlink", target, link])
+    if sys.base_prefix:
+        ro_bind(os.path.realpath(sys.base_prefix))
     try:
         user_site = site.getusersitepackages()
     except Exception:

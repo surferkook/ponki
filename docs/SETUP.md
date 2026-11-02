@@ -53,8 +53,9 @@ then `docker compose up -d`. If `PONKI_BODY_BIND` reaches beyond this machine
 and the token is empty, the example value or shorter than 24 characters, the
 hub doesn't start and says why.
 
-On each other machine, set up the workshop as in the sections below, and
-point it at the door for robots:
+On each other machine, `./setup.sh --workshop` asks for the door for robots
+(`ws://<house machine>:8210`) and the token, then
+`.venv/bin/python tools/start.py --workshop` starts it. By hand, it's:
 
 ```bash
 HOUSE_HUB=ws://<house machine>:8210 HOUSE_TOKEN=<same token> HOUSE_WORKSHOP_NAME=pi-workshop \
@@ -72,6 +73,27 @@ it running, see [Run it as a service](#run-it-as-a-service).
 - **Sidecars on the house machine itself** (ears with a real mic, for one) are
   reachable from the hub as `host.docker.internal`, on Linux too:
   `PONKI_EARS_URL=http://host.docker.internal:8203`.
+
+## Without Docker: setup.sh and start.py
+
+`./setup.sh` (macOS or Linux, Python 3.10 to 3.13) makes `.venv` and, with
+Node.js 20.17+, `services/sam/.venv`; creates `.env` from `.env.example`
+unless there is one (mode 600); asks for `META_API_KEY` (not echoed) and
+`HOUSE_HUMAN`; and, while `HOUSE_TOKEN` is empty or an example value, puts
+in `secrets.token_urlsafe(32)`: 43 characters of `A-Z a-z 0-9 - _`, safe in
+`.env`, systemd, compose and a URL, and well over the 24 the door for robots
+asks for. A token you already have is kept, since every workshop uses it.
+On a first run it copies the demo house (Pip) into `data/`. `--workshop`
+asks for `HOUSE_HUB` and the house's token instead; `--yes` asks nothing.
+
+`.venv/bin/python tools/start.py` runs the hub (this machine only, like
+Docker), a workshop named `desk-workshop` with the virtual desk that also
+looks for real devices, and each service with a `.venv` of its own: finding,
+and the voice and the ears once you've made theirs (below). `--lan` opens
+the UI and the door for robots (:8210) to your network, and the hub won't
+start with a weak token. `--workshop` runs only a workshop. Settings come
+from `.env`, and the environment wins. For a house that starts with the
+machine, use the systemd units ([Run it as a service](#run-it-as-a-service)).
 
 ## Run the hub (Step 1)
 

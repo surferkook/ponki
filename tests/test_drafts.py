@@ -188,3 +188,35 @@ class SandboxTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LinkHopsTests(unittest.TestCase):
+    """The sandbox finds a venv's real python behind any symlinks (uv, pyenv, Homebrew)."""
+
+    def test_every_link_on_the_way_in_order(self):
+        from workshop import sandbox
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "real-3.11.15" / "bin").mkdir(parents=True)
+            (root / "real-3.11.15" / "bin" / "python3.11").write_text("")
+            (root / "real-3.11").symlink_to("real-3.11.15")                      # a folder alias
+            (root / "bin").mkdir()
+            (root / "bin" / "python3.11").symlink_to(root / "real-3.11" / "bin" / "python3.11")
+            (root / "venv" / "bin").mkdir(parents=True)
+            (root / "venv" / "bin" / "python").symlink_to(root / "bin" / "python3.11")
+            hops = sandbox.link_hops(root / "venv" / "bin" / "python")
+        self.assertEqual(hops, [
+            (str(root / "venv" / "bin" / "python"), str(root / "bin" / "python3.11")),
+            (str(root / "bin" / "python3.11"), str(root / "real-3.11" / "bin" / "python3.11")),
+            (str(root / "real-3.11"), "real-3.11.15"),
+        ])
+
+    def test_a_loop_stops(self):
+        from workshop import sandbox
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "a").symlink_to(root / "b")
+            (root / "b").symlink_to(root / "a")
+            self.assertEqual(len(sandbox.link_hops(root / "a")), 2)
