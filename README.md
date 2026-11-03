@@ -9,7 +9,9 @@
 <p align="center">
   <a href="https://youtu.be/J4FiSAGElIE"><b>▶ Watch the demo</b></a><br>
   Disclosure: The robot voices in the demo video use Piper and Kokoro under the hood. The project has been refactored since, and now uses Meta MMS TTS.
-  
+</p>
+
+<p align="center">
   Ponki was designed for the Meta Global AI Developer Hackathon.<br>
   Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
