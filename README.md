@@ -240,6 +240,8 @@ Renaming, moving on and coming back change the record, not five files by hand. A
 
 The builder is a Muse Wonder agent with tools. The build sheet's buttons run the same steps and tell it what happened.
 
+Today its tools reach USB, serial and the network through the families the house knows, and a device it has never seen gets a family the builder writes itself. Next on its roadmap - the builder will write its own probes as well, investigating anything it can reach in a sandbox, while the steps, the checks and your approval stay as they are.
+
 | Step | Arduino (`pins`) | IP camera (`onvif`) | Rover (`mbot2`) | RoBoHoN |
 |---|---|---|---|---|
 | **1 · Find** | USB + firmware probe | WS-Discovery + LAN sweep | asks the USB device who it is | its server answers |
@@ -378,8 +380,6 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<the HOUSE_TOKEN in .env> .venv/bin/py
 
 Ponki was written by **Muse Code** from eleven short specs, one working step at a time, during the hackathon.
 The commit history shows it step by step.
-
-Thanks to the projects it stands on: FastAPI, Hugging Face Transformers, Makeblock's CyberPi, and Sharp's RoBoHoN.
 
 ## License
 
