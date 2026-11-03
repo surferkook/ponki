@@ -3,11 +3,11 @@
 <p align="center"><a href="https://github.com/surferkook/ponki/actions/workflows/ci.yml"><img src="https://github.com/surferkook/ponki/actions/workflows/ci.yml/badge.svg" alt="CI: tests, Ponki in a box on amd64 and arm64, and without Docker on Linux and macOS"></a></p>
 
 <p align="center">
-  <img src="docs/media/video.jpg" width="860" alt="RoBoHoN on the table: I used to be a phone, but now I have a soul">
+  <a href="https://youtu.be/J4FiSAGElIE"><img src="docs/media/video.jpg" width="860" alt="RoBoHoN on the table: I used to be a phone, but now I have a soul. Watch the demo"></a>
 </p>
 
 <p align="center">
-  <!-- <a href="https://youtu.be/TODO"><b>▶ Watch the demo</b></a> · -->
+  <a href="https://youtu.be/J4FiSAGElIE"><b>▶ Watch the demo</b></a><br>
   Ponki was designed for the Meta Global AI Developer Hackathon.<br>
   Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
@@ -329,7 +329,8 @@ docker compose --profile voice pull
 docker compose --profile voice up
 ```
 
-Note: Please do not expect a convincing frontier TTS model performance from MMS-TTS.
+Note: Please do not expect a convincing frontier TTS model performance from MMS-TTS. The demo video was recorded
+before the switch to MMS-TTS: some voices in it are Piper and Kokoro.
 
 `docker compose down -v` forgets everything, and the next start is a first run again. To build the images from
 your checkout instead of pulling them, add `--build` to `up`.
