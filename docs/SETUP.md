@@ -18,11 +18,14 @@ What compose sets up, and where:
 | `hub` | the house, on http://localhost:8200, and the door for robots on :8210 (both this machine only) | `META_API_KEY`, `HOUSE_HUMAN`, `HOUSE_TOKEN` from `.env` |
 | `sam` | finding (SAM 3.1), reached by the hub as `http://sam:8201` | `META_API_KEY` |
 | `workshop` | a workshop named `desk-workshop` with only the virtual desk | `HOUSE_DESK=on`, `HOUSE_WORKSHOP_FAMILIES=desk` |
+| `ears` | speech to text for *Hold to talk*, reached by the hub as `http://ears:8203` | `META_API_KEY` |
 | `voice` | `--profile voice`: Meta MMS-TTS, six voices made from its one speaker | none |
 
 The house's memory lives in two volumes, `ponki_hub` and `ponki_workshop`. On the
 first start the entrypoint copies `demo/hub` and `demo/workshop` into them once.
-Ears are off: a container has no house mic, so you type to the robots.
+The ears (Muse Voice Transcribe) run in their own container from the same
+image: *Hold to talk* uses the browser's mic, or a house mic once a workshop
+on a Linux machine adds one.
 
 The hub, the finding service and the voice have health checks, and the
 workshop waits for a healthy hub. Logs rotate at 10 MB, three files per
@@ -73,9 +76,9 @@ it running, see [Run it as a service](#run-it-as-a-service).
 - **Across a network you don't trust**, put `8210` behind a TLS proxy (Caddy,
   Tailscale Serve) and use `wss://` in `HOUSE_HUB`; the token travels in the
   first message.
-- **Sidecars on the house machine itself** (ears with a real mic, for one) are
-  reachable from the hub as `host.docker.internal`, on Linux too:
-  `PONKI_EARS_URL=http://host.docker.internal:8203`.
+- **Sidecars on the house machine itself** are reachable from the hub as
+  `host.docker.internal`, on Linux too. The ears run in their own container
+  (`PONKI_EARS_URL=off` turns hearing off).
 
 ## Without Docker: setup.sh and start.py
 
@@ -123,8 +126,11 @@ speaker speak through the house voice: Meta's MMS-TTS
 (`facebook/mms-tts-eng`, CC-BY-NC 4.0), run locally on the CPU at 48 kHz.
 It has one English speaker, so the six voices (warm, bright, small, low,
 playful, soft) are presets of its pitch and pace. The house hears people
-through a mic fixture and the ears (Muse Voice Transcribe, which needs
-`META_API_KEY`; there is no offline fallback).
+through *Hold to talk*, with a mic fixture or, when there is none, the
+browser's own mic (on localhost or https, the browser's rule), and the ears
+(Muse Voice Transcribe, which needs `META_API_KEY`; there is no offline
+fallback). The ears need nothing beyond Ponki's own packages: `start.py` runs
+them from `.venv` when `services/ears/.venv` doesn't exist.
 
 A robot with a speaker of its own can speak in the house voice too: its body
 declares `voice_play`, the name of an action that takes a clip's `url`

@@ -453,18 +453,62 @@ function openZoom(url){const d=$("#zoom");d.querySelector("img").src=url;
     try{await api(`/api/robots/${encodeURIComponent(m[1])}/seen/${m[2]}`,{method:"DELETE"});d.close()}catch(e){alert(e.message)}};
   d.onclick=()=>d.close(); if(!d.open)d.showModal();
 }
-function micButtonHTML(id){const has=S.mic&&S.mic.house_mic;
+/* Hold to talk: the house mic when there is one, else this browser's mic.
+   Either way the ears (Muse Voice Transcribe) turn it into text. */
+const BrowserMic={stream:null,ctx:null,node:null,chunks:[],rate:48000,starting:null,
+  can(){return !!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)},
+  start(){this.starting=(async()=>{
+    this.stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    const AC=window.AudioContext||window.webkitAudioContext; this.ctx=new AC(); this.rate=this.ctx.sampleRate;
+    const src=this.ctx.createMediaStreamSource(this.stream), node=this.ctx.createScriptProcessor(4096,1,1);
+    this.chunks=[]; node.onaudioprocess=e=>this.chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(this.ctx.destination); this.node=node})();
+    return this.starting},
+  async stop(){ // {audio: base64 16 kHz mono WAV, seconds}
+    try{await this.starting}finally{this.starting=null}
+    if(this.node)this.node.disconnect(); if(this.stream)this.stream.getTracks().forEach(t=>t.stop());
+    if(this.ctx)this.ctx.close().catch(()=>{}); this.node=this.stream=this.ctx=null;
+    let n=0; for(const c of this.chunks)n+=c.length;
+    const all=new Float32Array(n); let o=0; for(const c of this.chunks){all.set(c,o);o+=c.length} this.chunks=[];
+    const out=16000, len=Math.floor(n*out/this.rate), pcm=new Int16Array(len);
+    for(let i=0;i<len;i++){const x=i*this.rate/out,j=Math.floor(x),f=x-j;
+      const v=(all[j]||0)*(1-f)+(all[j+1]||0)*f; pcm[i]=Math.max(-1,Math.min(1,v))*32767}
+    const head=new DataView(new ArrayBuffer(44)),w=(at,str)=>{for(let i=0;i<str.length;i++)head.setUint8(at+i,str.charCodeAt(i))};
+    w(0,"RIFF");head.setUint32(4,36+len*2,true);w(8,"WAVE");w(12,"fmt ");head.setUint32(16,16,true);
+    head.setUint16(20,1,true);head.setUint16(22,1,true);head.setUint32(24,out,true);head.setUint32(28,out*2,true);
+    head.setUint16(32,2,true);head.setUint16(34,16,true);w(36,"data");head.setUint32(40,len*2,true);
+    const url=await new Promise((ok,bad)=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.onerror=bad;
+      fr.readAsDataURL(new Blob([head,pcm],{type:"audio/wav"}))});
+    return {audio:url.slice(url.indexOf(",")+1),seconds:len/out}}};
+function micMode(){if(S.mic&&S.mic.house_mic)return "house";
+  return S.mic&&S.mic.ears&&S.mic.ears.state==="ready"&&BrowserMic.can()?"browser":null}
+function micButtonHTML(id){const has=micMode();
   return `<button type="button" class="micbtn quiet" id="${id}" ${has?"":"disabled"}>
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     <span>Hold to talk</span></button>`}
+function micHint(){const m=micMode(), r=S.robots.find(isHome)||S.robots[0], n=r?disp(r):"Pip";
+  if(m==="house")return `Hold to talk, and say a robot's name: “${esc(n)}, where's the orange?”`;
+  if(m==="browser")return `Hold to talk (this browser's mic), and say a robot's name: “${esc(n)}, what's on the desk?”`;
+  if(S.mic&&S.mic.ears&&S.mic.ears.state==="ready")return "Talking needs this page on localhost or https (the browser's rule for mics): type on a robot's Talk tab instead.";
+  return "No house mic or ears: open a robot and type on its Talk tab."}
 function wireMic(btn,to,noteEl){
   if(!btn)return; let active=false;
   const start=async ev=>{if(active)return; if(ev.type==="keydown"&&(ev.repeat||![" ","Enter"].includes(ev.key)))return;
     active=true; btn.classList.add("listening"); btn.querySelector("span").textContent="Listening…";
-    try{await post("/api/mic/start")}catch(e){note(e.message)}};
+    mode=micMode();
+    if(mode==="browser")BrowserMic.start().catch(()=>{});
+    else try{await post("/api/mic/start")}catch(e){note(e.message)}};
+  let mode=null;
   const stop=async()=>{if(!active)return; active=false;
     btn.classList.remove("listening"); btn.classList.add("thinking"); btn.querySelector("span").textContent="…";
-    try{const r=await post("/api/mic/stop",{to:to||null});
+    try{let r;
+      if(mode==="browser"){let clip;
+        try{clip=await BrowserMic.stop()}catch(e){throw new Error(e&&e.name==="NotAllowedError"
+          ?"The browser's mic is blocked: allow it for this page (the icon in the address bar), then try again."
+          :"Couldn't use this browser's mic: "+(e&&e.message||e))}
+        if(clip.seconds<0.4)throw new Error("Hold the button while you talk (the first time, allow the mic, then hold again).");
+        r=await post("/api/hear",{audio:clip.audio,seconds:clip.seconds,to:to||null})}
+      else r=await post("/api/mic/stop",{to:to||null});
       if(!r.text)note("Didn't catch that. Hold the button while you talk.");
       else if(!r.to)note(`Heard “${r.text}”, but not for anyone. Say a robot's name.`)}
     catch(e){note(e.message)}
@@ -501,6 +545,9 @@ function welcomeHTML(){
     steps.push(`<li><strong>Meet ${esc(disp(cam))}.</strong> Open it and type on its Talk tab:
       <em>“${deskCam?`Hi ${esc(disp(cam))}! Can you find the orange and the rubber duck?`:`Hi ${esc(disp(cam))}, what can you do?`}”</em>
       ${go(cam.name,"Open "+esc(disp(cam)))}</li>`);
+    if(micMode())steps.push(`<li><strong>Talk to ${esc(disp(cam))}.</strong> Hold <em>Hold to talk</em> and say:
+      <em>“${esc(disp(cam))}, what's on the desk?”</em> ${micMode()==="browser"?"It's this browser's mic (allow it the first time); ":""}Muse Voice
+      Transcribe turns it into text.</li>`);
     steps.push(desk&&!lamp?`<li><strong>Add a robot.</strong> A virtual desk lamp is waiting on the workshop:
       the builder (Muse Wonder) walks you through finding it, checking it and giving it a soul. ${go("add","Add a robot")}</li>`
       :won?`<li><strong>Add a robot.</strong> Plug a device into a workshop and the builder finds it. ${go("add","Add a robot")}</li>`
@@ -515,7 +562,7 @@ function welcomeHTML(){
     <p class="hint">A home for robot souls. Every robot has a mind of its own (Muse Spark), finds things with SAM 3.1,
     and gets things done by talking to the others.</p>
     ${quiet?`<p class="voiceoff">The robots talk in text only: the house voice isn't running. To hear them, start Ponki with
-    <code>docker compose --profile voice up --build</code>, then switch on <strong>Hear it here</strong> in the sidebar.</p>`:""}
+    <code>docker compose --profile voice pull</code> and <code>docker compose --profile voice up</code>, then switch on <strong>Hear it here</strong> in the sidebar.</p>`:""}
     <ol>${steps.join("")}</ol>
     <p><button class="quiet" id="welcomed">Got it, hide this</button></p></div>`;
 }
@@ -526,13 +573,12 @@ function wireWelcome(){
 }
 function viewHouse(){
   document.documentElement.style.setProperty("--me","var(--ink)");
-  const hasMic=S.mic&&S.mic.house_mic;
   $("#main").innerHTML=`<div class="wrap houseview"><div class="hero"><div>
     <h1>The house</h1><p class="hint">Every robot, every conversation, as it happens.</p></div></div>
     ${welcomeHTML()}
     <div class="feed" id="feed">${feedList(S.events,"house")}</div>
     <div class="composer">${micButtonHTML("micbtn")}
-    <span class="hint" id="michint">${hasMic?`Hold to talk, and say a robot's name: “Keiki, where's the orange?”`:"No house mic is online: open a robot and type on its Talk tab."}</span></div></div>`;
+    <span class="hint" id="michint">${micHint()}</span></div></div>`;
   wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint")); wireWelcome();
   for(const m of [$("#feed"),$("#main")])if(m)m.scrollTop=m.scrollHeight;
 }
@@ -1004,7 +1050,7 @@ function viewSystem(){
       <p class="hint">The house itself: souls, the record, the builder, the web UI.</p>
       ${sys.hub?`<p class="mono">${esc(sys.hub.provider)} · ${esc(sys.hub.model)} · up since ${new Date(sys.hub.since*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} · ${sys.hub.robots} robots</p>`:""}</div>
     ${svc("voice","Voice","Speaks for robots without a speaker of their own (Meta MMS-TTS).")}
-    ${svc("ears","Ears","Turns what the house mic hears into text.")}
+    ${svc("ears","Ears","Turns what you say into text (Muse Voice Transcribe): Hold to talk, with the house mic or this browser’s.")}
     ${svc("finding","Finding","“Where exactly is X?” for robots with a camera.")}</div>
     <h3 class="sub">House settings</h3><div class="settings">
       <div><span>Robots chat<small>A robot may react to what another one says out loud.</small></span>
