@@ -23,12 +23,14 @@ hardware, and it comes back as itself.
 
 <p align="center"><a href="#try-it"><b>Jump to install ↓</b></a></p>
 
-## What you'll see
+## What it's like with real robots
 
-> *"The orange is on your right, Vroom-Vroom! Swing about 30 degrees right and roll 70 centimetres, then I'll check."*
+From a house with real hardware. With Docker you meet Pip and a desk lamp on a virtual desk: [Try it](#try-it).
+
+> *"Vroom, the chessboard is way behind you at the far end! Turn about 160 degrees to your left and roll 50 centimetres, then I'll check!"*
 > Keiki, the camera, guiding the rover across the table
 
-- **Robots that cooperate by talking.** Keiki finds the orange with SAM 3.1, works out which way the rover is
+- **Robots that cooperate by talking.** Keiki finds the target with SAM 3.1, works out which way the rover is
   facing and talks Vroom-Vroom there one move at a time. Nobody steers.
 - **Moments nobody asked for.** A body's senses start a turn by themselves: switch off the lights and Buddy notices
   the room went dark and says something about it. Robots keep habits of their own too, and the house gives them
@@ -86,7 +88,11 @@ what every robot spends.
 | **Fixture** | House equipment without a soul: workshops, speakers, mics. |
 | **The room** | Everything said out loud. The floor moderator decides who, if anyone, reacts. |
 
-## Six layers, one rule
+## Ponki's layered architecture
+
+As you get closer to the hardware, each kind of device gets an adapter (a family) for whatever protocol or
+language it speaks, and for a device the house has never seen, the builder (Muse Wonder) writes one. Complexity is
+abstracted away as you move up the layers, and the result is a clean, pluggable architecture.
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 720}}}%%
