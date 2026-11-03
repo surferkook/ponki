@@ -298,7 +298,7 @@ Linux) and a Meta Model API key.
 ```bash
 git clone https://github.com/surferkook/ponki.git && cd ponki
 cp .env.example .env          # put your key in META_API_KEY, and your first name in HOUSE_HUMAN
-docker compose pull           # the latest release's images, about 0.5 GB
+docker compose pull           # the latest release's images, about 0.2 GB to download
 docker compose up
 ```
 
@@ -315,7 +315,7 @@ Open **http://localhost:8200**. The house already has someone in it:
 5. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
    call to Muse and SAM.
 
-To hear the robots, add the house voice (Meta MMS-TTS, about 1.4 GB more) and switch on **Hear it here** in the
+To hear the robots, add the house voice (Meta MMS-TTS, about 0.5 GB more to download) and switch on **Hear it here** in the
 sidebar:
 
 ```bash
@@ -367,7 +367,7 @@ HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<the HOUSE_TOKEN in .env> .venv/bin/py
 ```
 
 ```bash
-.venv/bin/python -m unittest discover -s tests    # 247 tests, about 35 s: no hardware, network or model calls
+.venv/bin/python -m unittest discover -s tests    # 251 tests, about 35 s: no hardware, network or model calls
 ```
 
 ## How it was built
