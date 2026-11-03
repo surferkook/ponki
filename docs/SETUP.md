@@ -7,8 +7,9 @@ services. The [README](../README.md) has the overview.
 ## With Docker
 
 `docker compose pull` then `docker compose up` runs the hub, the finding
-service and a workshop with the virtual desk, and starts the house with Pip
-in it (see the README). The images are the release `compose.yaml` names
+service, the ears and a workshop with the virtual desk, and starts the house
+with Pip in it (see the README); `--profile voice` on both adds the house
+voice. The images are the release `compose.yaml` names
 (`PONKI_VERSION` in `.env` picks another); `up --build` builds them from
 your checkout instead.
 What compose sets up, and where:
@@ -27,7 +28,7 @@ The ears (Muse Voice Transcribe) run in their own container from the same
 image: *Hold to talk* uses the browser's mic, or a house mic once a workshop
 on a Linux machine adds one.
 
-The hub, the finding service and the voice have health checks, and the
+The hub, the finding service, the ears and the voice have health checks, and the
 workshop waits for a healthy hub. Logs rotate at 10 MB, three files per
 service. Everything you might change goes in `.env` as a `PONKI_` setting
 (see `.env.example`), so `compose.yaml` stays as it is and `git pull` stays
@@ -94,30 +95,31 @@ asks for `HOUSE_HUB` and the house's token instead; `--yes` asks nothing.
 
 `.venv/bin/python tools/start.py` runs the hub (this machine only, like
 Docker), a workshop named `desk-workshop` with the virtual desk that also
-looks for real devices, and each service with a `.venv` of its own: finding,
-and the voice and the ears once you've made theirs (below). `--lan` opens
+looks for real devices, the ears, and each service with a `.venv` of its
+own: finding, and the voice once you've made its venv (below). `--lan` opens
 the UI and the door for robots (:8210) to your network, and the hub won't
-start with a weak token. `--workshop` runs only a workshop. Settings come
+start with a weak token (the browser's mic needs localhost or https, so
+from other machines *Hold to talk* wants a TLS front such as Tailscale
+Serve, below). `--workshop` runs only a workshop. Settings come
 from `.env`, and the environment wins. For a house that starts with the
 machine, use the systemd units ([Run it as a service](#run-it-as-a-service)).
 
-## Run the hub (Step 1)
+## The hub by hand, and a test robot
+
+`start.py` does this for you; by hand, after `./setup.sh`:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env   # set HOUSE_TOKEN at least
-.venv/bin/uvicorn hub.main:app --host 0.0.0.0 --port 8200
+.venv/bin/python -m hub.serve   # http://localhost:8200; HOUSE_BODY_PORT=8210 opens the door for robots
 ```
 
-Then in another shell:
+Then in another shell, a robot that lives only in software:
 
 ```bash
 HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<same token> .venv/bin/python bodies/sdk/example.py
 ```
 
-Open http://localhost:8200/ — the tester robot appears on the board and its
-actions run from the Body tab.
+Open http://localhost:8200/: Tester appears in the sidebar, and its actions
+run from its Body tab.
 
 ## The house voice and hearing
 
@@ -144,6 +146,9 @@ house speakers. RoBoHoN's `voice` setting (in his config, or
 | `house` (default) | the house voice, on the house speakers | every model stays a Meta model |
 | `stream` | the house voice, on his own speaker | needs his server to offer `POST /api/play_wav` |
 | `own` | his server's own voices | Kokoro, Piper, StyleTTS2: not Meta models |
+
+The voice needs a venv of its own (PyTorch and the model, about 1 GB); the
+ears' venv is only for their systemd unit:
 
 ```bash
 python3 -m venv services/voice/.venv
@@ -176,11 +181,8 @@ Python deps are pinned in `bodies/onvif/requirements.txt`.
 
 **A stand-in for the camera.** The NUC's workshop also enables the camera
 family (`HOUSE_WORKSHOP_FAMILIES=robohon,onvif` in
-`ponkihouse-workshop-nuc`), with the same pins in the hub's venv:
-
-```bash
-.venv/bin/pip install -r bodies/onvif/requirements.txt
-```
+`ponkihouse-workshop-nuc`), with the same pins in `.venv` (`./setup.sh`
+installs them; by hand, `.venv/bin/pip install -r bodies/onvif/requirements.txt`).
 
 When the Pi leaves, the hub moves the camera to the NUC after a minute
 (`HOUSE_TAKEOVER_AFTER`, seconds; `HOUSE_TAKEOVER=off` turns it off). While
@@ -196,12 +198,13 @@ When the Pi comes back, it sets its old copy aside and the camera stays on
 the NUC.
 
 Finding things (`locate` / `watch`) is done by SAM 3.1 on Meta's Model API,
-through a small local service on the NUC:
+through a small local service on the house machine (`./setup.sh` makes it
+when Node.js 20.17+ is there; by hand):
 
 ```bash
 python3 -m venv services/sam/.venv
 services/sam/.venv/bin/pip install -r services/sam/requirements.txt
-(cd services/sam/js && npm install)   # the mask decoder worker
+(cd services/sam/js && npm ci --omit=dev)   # the mask decoder worker
 ./deploy/install.sh ponkihouse-sam
 sudo systemctl enable --now ponkihouse-sam   # 127.0.0.1:8201
 ```
@@ -240,12 +243,12 @@ with a different `.env`).
 ```bash
 git clone <this repo> ~/ponkihouse   # any folder works
 cd ~/ponkihouse
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env                # set HOUSE_TOKEN at least
+./setup.sh                          # .venv, .env, a HOUSE_TOKEN, the demo house
 ./deploy/install.sh                 # fills in this clone's path and your user
 sudo systemctl enable --now ponkihouse-hub
 sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
 ```
 
 Then open `https://<this-machine>.<your-tailnet>.ts.net:8445/` from any
-device on your tailnet.
+device on your tailnet. It's https, so *Hold to talk* can use that device's
+browser mic too.
