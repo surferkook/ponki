@@ -68,7 +68,7 @@ class WebUi(unittest.TestCase):
     def test_api_paths_exist_in_routes(self) -> None:
         from hub.main import create_app
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             app = create_app(data_dir=Path(tmp), token="x")
         patterns = []
         for route in app.routes:
@@ -110,13 +110,38 @@ class WebUi(unittest.TestCase):
         from fastapi.testclient import TestClient
         from hub.main import create_app
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             app = create_app(data_dir=Path(tmp), token="x")
             client = TestClient(app, raise_server_exceptions=False)
             for url in ("/api/robots/eye/portrait.webp", "/api/departed/eye-1/portrait.webp"):
                 response = client.get(url)
                 self.assertIn("default-src 'none'",
                               response.headers.get("content-security-policy", ""), url)
+
+    def test_photos_and_clips_are_asked_for_again(self) -> None:
+        """After a house starts over, seen/2.jpg is a new photo: never cached blind."""
+        from fastapi.testclient import TestClient
+        from hub.main import create_app
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            seen = Path(tmp) / "seen" / "pip"
+            seen.mkdir(parents=True)
+            (seen / "2.jpg").write_bytes(b"\xff\xd8 an orange")
+            (Path(tmp) / "voice").mkdir()
+            (Path(tmp) / "voice" / "7.wav").write_bytes(b"RIFF a clip")
+            client = TestClient(create_app(data_dir=Path(tmp), token="x"))
+            for url, path in (("/api/robots/pip/seen/2.jpg", seen / "2.jpg"),
+                              ("/api/voice/7.wav", Path(tmp) / "voice" / "7.wav")):
+                first = client.get(url)
+                self.assertEqual(first.status_code, 200, url)
+                self.assertEqual(first.headers["cache-control"], "no-cache", url)
+                etag = first.headers["etag"]
+                again = client.get(url, headers={"If-None-Match": etag})
+                self.assertEqual(again.status_code, 304, url)
+                path.write_bytes(b"\xff\xd8 the blue lamp, a new house")
+                fresh = client.get(url, headers={"If-None-Match": etag})
+                self.assertEqual(fresh.status_code, 200, url)
+                self.assertIn(b"new house", fresh.content)
 
 
 if __name__ == "__main__":

@@ -333,7 +333,7 @@ function renderSidebar(){
   const spent=S.robots.reduce((a,r)=>a+((r.usage&&r.usage.usd)||0),0);
   h+=`<div id="foot"><span class="frow"><span>Brain</span><span class="val">${esc(S.info?S.info.model:"")}</span></span>
     <span class="frow"><span>Hear it here</span><button class="switch val" id="hearsw" type="button">${S.hear?"on":"off"}</button></span>
-    <span class="frow"><span>Show the floor</span><button class="switch val" id="floorsw" type="button">${S.showFloor?"on":"off"}</button></span>
+    <span class="frow" title="Show the floor reveals the floor moderator's decisions in the house log"><span>Show the floor</span><button class="switch val" id="floorsw" type="button" aria-describedby="floorhint">${S.showFloor?"on":"off"}</button><span id="floorhint" hidden>Show the floor reveals the floor moderator's decisions in the house log</span></span>
     <span class="frow"><span>Spent so far</span><span class="val">${spent?"$"+spent.toFixed(2):"–"}</span></span></div>`;
   $("#side").innerHTML=h;
   $$("#side [data-sel]").forEach(b=>b.onclick=()=>{select(b.dataset.sel)});
@@ -434,6 +434,10 @@ function feedHTML(e,ctx){
     default: return "";
   }
 }
+/* the floor's decisions join the feed, in time order, while Show the floor is on */
+function withFloor(events,rid){if(!S.showFloor||!S.floor.length)return events;
+  const fl=rid?S.floor.filter(e=>relevant(e,rid)||e.react===rid):S.floor;
+  return [...events,...fl].sort((a,b)=>(a.t||0)-(b.t||0))}
 function feedList(events,ctx){
   // hide offline->online pairs within 90 s (a restart isn't news)
   const hidden=new Set();
@@ -552,7 +556,7 @@ function welcomeHTML(){
       the builder (Muse Wonder) walks you through finding it, checking it and giving it a soul. ${go("add","Add a robot")}</li>`
       :won?`<li><strong>Add a robot.</strong> Plug a device into a workshop and the builder finds it. ${go("add","Add a robot")}</li>`
       :`<li><strong>Add a robot.</strong> Start a workshop on the machine your devices are attached to, and Add a robot finds them.</li>`);
-    if(deskCam&&desk)steps.push(`<li><strong>Watch them work together.</strong> ${lamp?"":"Once the lamp has a soul, "}ask ${esc(disp(deskCam))}:
+    if(deskCam&&desk)steps.push(`<li><strong>Watch them work together.</strong> ${lamp?"Ask":"Once the lamp has a soul, ask"} ${esc(disp(deskCam))}:
       <em>“Ask the lamp to glow blue, then check with your own eyes.”</em> Everything they say shows up here.</li>`);
   }
   steps.push(`<li><strong>Look under the hood.</strong> Each robot's Stats tab shows what it spends;
@@ -576,7 +580,7 @@ function viewHouse(){
   $("#main").innerHTML=`<div class="wrap houseview"><div class="hero"><div>
     <h1>The house</h1><p class="hint">Every robot, every conversation, as it happens.</p></div></div>
     ${welcomeHTML()}
-    <div class="feed" id="feed">${feedList(S.events,"house")}</div>
+    <div class="feed" id="feed">${feedList(withFloor(S.events),"house")}</div>
     <div class="composer">${micButtonHTML("micbtn")}
     <span class="hint" id="michint">${micHint()}</span></div></div>`;
   wireZoom($("#main")); wireMic($("#micbtn"),null,$("#michint")); wireWelcome();
@@ -604,7 +608,7 @@ function viewRobot(){
   if(S.tab==="soul")wireSoul(r); if(S.tab==="stats")wireStats(r);
 }
 function talkHTML(r){
-  const evs=S.events.filter(e=>relevant(e,r.name));
+  const evs=withFloor(S.events.filter(e=>relevant(e,r.name)),r.name);
   return `<div class="feed" id="feed">${evs.length?feedList(evs,"talk"):`<p class="hint">Nothing yet. Say hi to ${esc(disp(r))}.</p>`}</div>
   <form class="composer" id="talkform"><input type="text" id="talktext" placeholder="Say something to ${esc(disp(r))}…" autocomplete="off">
   ${micButtonHTML("micbtn")}<button type="submit" id="sendbtn">Send</button></form>
@@ -1214,7 +1218,7 @@ function appendFeed(e){
   if(NONFEED.includes(e.kind))return;
   const feed=$("#feed"); if(!feed)return;
   const ctx=S.sel==="house"?"house":"talk";
-  if(S.sel!=="house"&&!relevant(e,S.sel))return;
+  if(S.sel!=="house"&&!relevant(e,S.sel)&&!(e.kind==="floor"&&e.react===S.sel))return;
   const html=feedHTML(e,ctx); if(!html)return;
   const tmp=document.createElement("div"); tmp.innerHTML=html;
   const empty=feed.querySelector(".hint"); if(empty&&feed.children.length<=1)feed.innerHTML="";

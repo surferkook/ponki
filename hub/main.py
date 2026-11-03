@@ -42,6 +42,30 @@ from .providers import get_provider  # noqa: E402
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 CSP = {"Content-Security-Policy": "default-src 'none'; sandbox"}
+
+
+def _revalidated(request: Request, etag: str, make) -> Response:
+    """Photos, clips and portraits reuse their URLs after a house starts over
+    (seen/2.jpg is a new photo then), so the browser always asks again
+    (no-cache) and gets a 304 when it already has this exact file."""
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if etag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
+        return Response(status_code=304, headers=headers)
+    response = make()
+    response.headers.update(headers)
+    return response
+
+
+def _file_etag(path) -> str:
+    st = path.stat()
+    return f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+
+
+def _bytes_etag(data: bytes) -> str:
+    import hashlib
+
+    return '"' + hashlib.sha256(data).hexdigest()[:24] + '"'
+
 STATIC = Path(__file__).parent / "static" / "index.html"
 
 
@@ -228,7 +252,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
 
     # -- photos ---------------------------------------------------------------------
     @app.get("/api/robots/{rid}/seen/{filename}")
-    async def seen_file(rid: str, filename: str):
+    async def seen_file(rid: str, filename: str, request: Request):
         match = re.fullmatch(r"(\d+)\.(jpg|gif|mp4)", filename or "")
         if not match:
             raise HTTPException(404, "that photo is gone (only the most recent ones are kept)")
@@ -238,10 +262,11 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
                 raise HTTPException(404, "that photo is gone (only the most recent ones are kept)")
             raise HTTPException(404, "that clip is gone (only the most recent ones are kept)")
         media = {"jpg": "image/jpeg", "gif": "image/gif", "mp4": "video/mp4"}[match.group(2)]
-        headers = {"Cache-Control": "max-age=86400"}
+        headers = {}
         if match.group(2) in ("gif", "mp4"):
             headers["Content-Disposition"] = f'inline; filename="{rid}-{filename}"'
-        return FileResponse(path, media_type=media, headers=headers)
+        return _revalidated(request, _file_etag(path),
+                            lambda: FileResponse(path, media_type=media, headers=headers))
 
     @app.delete("/api/robots/{rid}/seen/{n}")
     async def delete_seen(rid: str, n: int):
@@ -267,7 +292,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         return {"display_name": new}
 
     @app.get("/api/robots/{rid}/portrait.webp")
-    async def portrait(rid: str):
+    async def portrait(rid: str, request: Request):
         import base64 as _b64
 
         if rid not in house.manifests:
@@ -275,8 +300,9 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         data = house.soul(rid).data.get("portrait")
         if not data:
             return JSONResponse({"detail": "no portrait yet"}, status_code=404, headers=CSP)
-        return Response(_b64.b64decode(data), media_type="image/webp",
-                        headers={**CSP, "Cache-Control": "max-age=86400"})
+        image = _b64.b64decode(data)
+        return _revalidated(request, _bytes_etag(image),
+                            lambda: Response(image, media_type="image/webp", headers=CSP))
 
     @app.post("/api/robots/{rid}/portrait")
     async def draw_portrait(rid: str):
@@ -353,13 +379,13 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         return voice_mod.VOICES
 
     @app.get("/api/voice/{name}")
-    async def voice_clip(name: str):
+    async def voice_clip(name: str, request: Request):
         match = re.fullmatch(r"(\d+)\.wav", name or "")
         path = house.data_dir / "voice" / name if match else None
         if not path or not path.exists():
             raise HTTPException(404, "that voice clip is gone")
-        return FileResponse(path, media_type="audio/wav",
-                            headers={"Cache-Control": "max-age=3600"})
+        return _revalidated(request, _file_etag(path),
+                            lambda: FileResponse(path, media_type="audio/wav"))
 
     # -- goodbye / departed ---------------------------------------------------------
     @app.delete("/api/robots/{rid}")
@@ -447,7 +473,7 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         return {"ok": True}
 
     @app.get("/api/departed/{entry_id}/portrait.webp")
-    async def departed_portrait(entry_id: str):
+    async def departed_portrait(entry_id: str, request: Request):
         import base64 as _b64
 
         try:
@@ -457,8 +483,9 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
         data = soul_data.get("portrait")
         if not data:
             return JSONResponse({"detail": "no portrait kept"}, status_code=404, headers=CSP)
-        return Response(_b64.b64decode(data), media_type="image/webp",
-                        headers={**CSP, "Cache-Control": "max-age=86400"})
+        image = _b64.b64decode(data)
+        return _revalidated(request, _bytes_etag(image),
+                            lambda: Response(image, media_type="image/webp", headers=CSP))
 
     # -- house settings, mic, system, logs --------------------------------------------
     @app.get("/api/house")
