@@ -60,5 +60,44 @@ class OneSupervisor(unittest.TestCase):
                              "one supervisor spawns each robot once at start")
 
 
+class LogsWithoutAJournal(unittest.TestCase):
+    """Docker, macOS, a terminal: the workshop keeps its own record."""
+
+    def setUp(self) -> None:
+        workshop._RECENT.clear()
+        self.addCleanup(workshop._RECENT.clear)
+        patcher = mock.patch.object(workshop, "_journal", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def logs(self, **kw) -> str:
+        body = workshop.build_body()
+        return asyncio.run(body._handlers["logs"](**kw))
+
+    def test_own_lines_and_a_robots_lines(self) -> None:
+        import io
+        tee = workshop._Tee(io.StringIO(), "workshop")
+        tee.write("hub connected\npartial")
+        tee.write(" line\n")
+        read, write = os.pipe()
+        os.write(write, b"blinky says hi\n\xff odd byte\n")
+        os.close(write)
+        with mock.patch.object(sys, "__stdout__", io.StringIO()) as out:
+            workshop._relay("blinky", os.fdopen(read, "rb"))
+        self.assertIn("blinky: blinky says hi", out.getvalue())
+        everything = self.logs()
+        self.assertIn("workshop: hub connected", everything)
+        self.assertIn("workshop: partial line", everything)
+        self.assertIn("blinky: blinky says hi", everything)
+        only = self.logs(name="blinky")
+        self.assertNotIn("hub connected", only)
+        self.assertEqual(len(only.splitlines()), 2)
+
+    def test_never_asks_journalctl(self) -> None:
+        with mock.patch.object(workshop.subprocess, "run",
+                               side_effect=AssertionError("journalctl")):
+            self.assertEqual(self.logs(), "")
+
+
 if __name__ == "__main__":
     unittest.main()

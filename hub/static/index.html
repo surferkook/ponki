@@ -16,14 +16,7 @@
   --focus:#ffc83d; --bad:#c2362f; --good:#2f8a57; --me:#4a6cf7;
   color-scheme:light;
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#10142a; --surface:#191e38; --ink:#e9ecf7;
-    --ink-2:#c3c8de; --muted:#98a0bf; --line:#2b3152;
-    --you:#e9ecf7; --you-ink:#10142a; --focus:#ffc83d; --bad:#ff7a70;
-    --good:#6fd39a; --me:#4a6cf7; color-scheme:dark;
-  }
-}
+/* dark: by the switch at the bottom right (light is the default) */
 :root[data-theme="dark"]{
   --bg:#10142a; --surface:#191e38; --ink:#e9ecf7; --ink-2:#c3c8de;
   --muted:#98a0bf; --line:#2b3152; --you:#e9ecf7; --you-ink:#10142a;
@@ -207,11 +200,26 @@ table{border-collapse:collapse;width:100%} td,th{padding:6px 8px;border-bottom:1
   .houseview,.talkview{padding-top:18px}
   .houseview>.hero,.talkview>.hero,.talkview>.tabs{margin-left:16px;margin-right:16px}
   .houseview .feed,.talkview .feed{overflow:visible;padding-left:16px;padding-right:16px}
-  .houseview .composer,.talkview .composer{position:sticky;bottom:0;background:var(--bg);padding:10px 16px 14px}
+  .houseview .composer,.talkview .composer{position:sticky;bottom:0;background:var(--bg);padding:10px 62px 14px 16px}
   .talkview #talkerr{padding:0 16px 12px}
   .grid2{grid-template-columns:1fr}
   .hero h1{font-size:36px}
 }
+#themesw{position:fixed;right:16px;bottom:16px;z-index:5;width:38px;height:38px;padding:0;
+  display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  box-shadow:0 2px 10px color-mix(in srgb,var(--ink) 14%,transparent)}
+#themesw:hover{border-color:var(--ink-2)}
+.houseview .composer,.talkview .composer{padding-right:66px}
+/* a portrait on its way: a ring of the robot's colour turns round its face */
+.face.painting::after{content:"";position:absolute;inset:0;border-radius:50%;
+  border:3px solid transparent;border-top-color:var(--fc);border-right-color:var(--fc);
+  animation:spin 1.1s linear infinite}
+.face.painting>span{animation:breathe 1.6s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes breathe{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){.face.painting::after{animation:none;border-style:dashed;border-color:var(--fc)}
+  .face.painting>span{animation:none}}
 /* --CHUNK2-- */
 .devcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:var(--surface)}
 .checkcard summary{cursor:pointer}
@@ -254,15 +262,24 @@ details.told summary:hover{color:var(--ink)}
 </div>
 <dialog id="zoom"><img alt=""><button id="zoomdel" type="button">Delete photo</button></dialog>
 <div id="tip" role="tooltip"></div>
+<button id="themesw" type="button"></button>
 <script>
 "use strict";
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+/* light or dark: light unless the switch at the bottom right says otherwise */
+function setTheme(t){const dark=t==="dark";
+  if(dark)document.documentElement.dataset.theme="dark"; else delete document.documentElement.dataset.theme;
+  const b=$("#themesw"); if(b){b.textContent=dark?"☀":"☾";
+    b.title=b.ariaLabel=dark?"Switch to the light theme":"Switch to the dark theme"}}
+setTheme(store.get("ponki.theme","light"));
+$("#themesw").onclick=()=>{const t=document.documentElement.dataset.theme==="dark"?"light":"dark";
+  store.set("ponki.theme",t); setTheme(t)};
 const S={info:null,robots:[],events:[],floor:[],departed:[],settings:{},mic:{},system:null,
   voices:[],grounding:{},builds:[],workshops:[],families:[],
-  sel:store.get("ponki.sel","house"),tab:store.get("ponki.tab","talk"),
+  sel:(()=>{try{return sessionStorage.getItem("ponki.sel")||"house"}catch(e){return "house"}})(),tab:store.get("ponki.tab","talk"),
   hear:store.get("ponki.hear",false),showFloor:store.get("ponki.floor",false),
   buildId:null,logSource:"events",results:{},loadedUi:0,audioQ:[],playing:false};
 const PALETTE=["#4a6cf7","#e0457b","#16a085","#f39c12","#8e44ad","#2d9cdb"];
@@ -282,10 +299,12 @@ async function api(path,opts){const res=await fetch(path,opts);
 function post(path,body){return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})}
 /* home = its body is connected and its device answers (a switched-off rover is away) */
 function isHome(r){return !!r&&(r.home??r.online)}
+/* a portrait is coming: being born (it's painted right after), or being painted */
+function portraitComing(r){return !!r&&!r._gone&&(!!r.painting||(!r.portrait&&!!r.online&&!r.born))}
 function faceHTML(r,size,extra){const c=colorOf(r),n=disp(r)||"?";
-  const cls=r&&r._gone?"gone":(r&&!isHome(r)?"away":"");
+  const cls=(r&&r._gone?"gone":(r&&!isHome(r)?"away":""))+(portraitComing(r)?" painting":"");
   const inner=r&&r.portrait?`<img src="${esc(r.portrait)}" alt="">`:`<span style="color:${c}">${esc(n[0]||"?")}</span>`;
-  return `<span class="face ${cls} ${extra||""}" data-face="${esc(r?r.name:"")}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.42)}px;border:2px solid ${c};background:${c}38">${inner}</span>`}
+  return `<span class="face ${cls} ${extra||""}" data-face="${esc(r?r.name:"")}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.42)}px;border:2px solid ${c};background:${c}38;--fc:${c}"${portraitComing(r)?` title="${r.born?"Its portrait is being painted":"Waking up, then its portrait is painted"}"`:""}>${inner}</span>`}
 function houseFace(size){return `<span class="disc" style="width:${size}px;height:${size}px" aria-hidden="true">⌂</span>`}
 function renderSidebar(){
   const home=S.robots.filter(isHome).length;
@@ -302,7 +321,8 @@ function renderSidebar(){
     return `${k.replace(/_/g," ")} ${v}`};
   for(const r of [...S.robots].sort((a,b)=>a.name<b.name?-1:1)){
     const shown=Object.entries(r.state||{}).filter(([k])=>k!=="reachable");
-    const st=isHome(r)?["home",...shown.map(readable)].join(", "):r.online?["away",...shown.map(readable)].join(", "):"away";
+    let st=isHome(r)?["home",...shown.map(readable)].join(", "):r.online?["away",...shown.map(readable)].join(", "):"away";
+    if(portraitComing(r))st=r.born?"portrait on its way…":"waking up…";
     h+=`<button class="row ${S.sel===r.name?"sel":""}" data-sel="${esc(r.name)}"><span class="pres ${isHome(r)?"on":"off"}" title="${isHome(r)?"home":"away"}">${faceHTML(r,44)}</span><span class="tx"><span class="nm">${esc(disp(r))}</span><br><span class="st">${esc(st)}</span></span></button>`}
   h+=`<button class="row ${S.sel==="add"?"sel":""}" data-sel="add"><span class="disc dash">+</span><span class="tx"><span class="nm">Add a robot</span><br><span class="st">${unfinished?"Building "+esc(unfinished.name||"a robot")+"…":won?won+" workshop"+(won>1?"s":"")+" ready":"No workshop online"}</span></span></button>`;
   h+=`<button class="row ${S.sel==="system"?"sel":""}" data-sel="system"><span class="disc" aria-hidden="true">⚙</span><span class="tx"><span class="nm">System</span><br><span class="st">${sysBad?sysBad+(sysBad>1?" things need a look":" thing needs a look"):"All running"}</span></span></button>`;
@@ -322,8 +342,8 @@ function renderSidebar(){
   const fs=$("#floorsw"); if(fs)fs.onclick=()=>{S.showFloor=!S.showFloor;
     store.set("ponki.floor",S.showFloor); render()};
 }
-function select(sel){S.sel=sel;store.set("ponki.sel",sel);
-  if(sel.startsWith("~")||["house","add","system"].includes(sel))document.documentElement.style.setProperty("--me","#1b2340");
+function select(sel){S.sel=sel;try{sessionStorage.setItem("ponki.sel",sel)}catch(e){}
+  if(sel.startsWith("~")||["house","add","system"].includes(sel))document.documentElement.style.setProperty("--me","var(--ink)");
   render()}
 function robotOfSel(){return byId(S.sel)}
 function relevant(e,rid){return e.robot===rid||e.to===rid||e.frm===rid}
@@ -505,7 +525,7 @@ function wireWelcome(){
   const w=$("#welcomed"); if(w)w.onclick=()=>{store.set("ponki.welcomed",true); viewHouse()};
 }
 function viewHouse(){
-  document.documentElement.style.setProperty("--me","#1b2340");
+  document.documentElement.style.setProperty("--me","var(--ink)");
   const hasMic=S.mic&&S.mic.house_mic;
   $("#main").innerHTML=`<div class="wrap houseview"><div class="hero"><div>
     <h1>The house</h1><p class="hint">Every robot, every conversation, as it happens.</p></div></div>
@@ -781,7 +801,7 @@ S.scan={}; S.draftCode={}; S.inflight=false; S.buildErr=""; S.landing=false; S.s
 function buildDone(b){return !!b&&(b.stage==="done"||!!b.robot)}
 function wsName(id){const w=(S.workshops||[]).find(x=>x.id===id); return (w&&w.display_name)||id||""}
 function viewAdd(){
-  document.documentElement.style.setProperty("--me","#1b2340");
+  document.documentElement.style.setProperty("--me","var(--ink)");
   const open=S.landing?null:(S.buildId||([...S.builds].reverse().find(b=>!buildDone(b))||{}).id);
   if(open){
     if(S.sheet&&S.sheet.id===open)viewBuild(S.sheet);
@@ -932,7 +952,7 @@ function viewBuild(sheet){
     ${card(1,deviceStep(sheet,lock))}${card(2,connectStep(sheet,lock,cur))}${card(3,bodyStep(sheet,cur))}${card(4,checkStep(sheet,lock,cur))}${card(5,soulStep(sheet,lock,done,fx))}
     </div><div><h2>The builder</h2><div class="feed" id="buildfeed">
       ${(sheet.messages||[]).map(m=>m.role==="event"?`<div class="line">${esc(m.text||"")}</div>`
-        :`<div class="bubble ${m.role==="human"?"you":""}" style="--rc:#1b2340"><div class="body">${esc(m.text||"")}</div></div>`).join("")}
+        :`<div class="bubble ${m.role==="human"?"you":""}" style="--rc:var(--ink)"><div class="body">${esc(m.text||"")}</div></div>`).join("")}
       ${sheet.busy?`<p class="hint">The builder is working…</p>`:""}</div>
       <form class="composer" id="buildform"><input type="text" id="buildtext" placeholder="Tell the builder…" autocomplete="off">
       <button ${sheet.busy||S.inflight?"disabled":""}>Send</button></form><p class="hint bad" id="builderr">${esc(S.buildErr||"")}</p></div></div></div>`;
@@ -966,7 +986,7 @@ function wireBuild(s){
     await buildPost("/say",{text})};
 }
 function viewSystem(){
-  document.documentElement.style.setProperty("--me","#1b2340");
+  document.documentElement.style.setProperty("--me","var(--ink)");
   const sys=S.system||{services:{},workshops:[],equipment:[]};
   const pill=(ok,text,off)=>`<span class="spill ${ok?"ok":off?"":"bad"}">${esc(text)}</span>`;
   const offNote={voice:"Not in this house: robots without a speaker talk in text. With Docker, add it with docker compose --profile voice up.",
@@ -1049,7 +1069,7 @@ function wireSystem(){
   $("#logrefresh").onclick=load; $("#logsrc").onchange=load; load();
 }
 async function viewDeparted(entryId){
-  document.documentElement.style.setProperty("--me","#1b2340");
+  document.documentElement.style.setProperty("--me","var(--ink)");
   let d=null; try{d=await api(`/api/departed/${encodeURIComponent(entryId)}`)}catch(e){}
   if(!d){$("#main").innerHTML=`<div class="wrap"><p class="hint">Nobody by that id moved on.</p></div>`;return}
   const fake={name:d.name,display_name:d.display_name,color:d.color,

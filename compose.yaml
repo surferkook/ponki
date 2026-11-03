@@ -28,7 +28,7 @@ name: ponki
 
 x-ponki: &ponki
   build: .
-  image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-1.0.0-rc.5}
+  image: ghcr.io/surferkook/ponki:${PONKI_VERSION:-1.0.0-rc.6}
   env_file: .env                  # cp .env.example .env first
   restart: unless-stopped
   logging:
@@ -100,7 +100,7 @@ services:
   voice:
     profiles: [voice]
     build: services/voice
-    image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-1.0.0-rc.5}
+    image: ghcr.io/surferkook/ponki-voice:${PONKI_VERSION:-1.0.0-rc.6}
     restart: unless-stopped
     logging:
       driver: json-file

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import collections
 import concurrent.futures
 import importlib.util
 import inspect
@@ -216,12 +217,19 @@ def _spawn(name: str):
     fam = family_for(ref)  # the robot's family, even if not enabled
     argv, env = fam.command(str(path), config)
     argv = [str(a) for a in argv]
-    if shutil.which("systemd-cat"):
+    journal = _journal() and shutil.which("systemd-cat")
+    if journal:
         argv = ["systemd-cat", "-t", f"ponkihouse-{name}"] + argv
     full_env = dict(os.environ)
     full_env.update({str(k): str(v) for k, v in (env or {}).items()})
     full_env["HOUSE_WORKSHOP"] = workshop_name()  # the hub knows who runs it
-    proc = subprocess.Popen(argv, env=full_env, cwd=str(_REPO))
+    if journal:
+        proc = subprocess.Popen(argv, env=full_env, cwd=str(_REPO))
+    else:  # no journal: its lines go to ours, and into the workshop's own record
+        full_env.setdefault("PYTHONUNBUFFERED", "1")
+        proc = subprocess.Popen(argv, env=full_env, cwd=str(_REPO),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        threading.Thread(target=_relay, args=(name, proc.stdout), daemon=True).start()
     with _lock:
         _children[name] = {"proc": proc, "started": time.time(),
                            "device_id": _device_id_of(config)}
@@ -427,6 +435,66 @@ def _own_unit() -> str:
         return match.group(1)
     match = re.search(r"([a-z0-9-]+\.service)", text)
     return match.group(1) if match else ""
+
+
+# -- logs: the journal under systemd, else the workshop's own record ---------
+# Run as a ponkihouse-* unit, the workshop and its robots write to the
+# journal and "logs" reads it. Anywhere else (Docker, macOS, a terminal)
+# there's no journal to read: the workshop keeps its own recent lines and
+# its robots' in memory (and still prints them all).
+_RECENT: collections.deque = collections.deque(maxlen=5000)
+_recent_lock = threading.Lock()
+
+
+def _journal() -> bool:
+    return bool(shutil.which("journalctl")) and _own_unit().startswith("ponkihouse-")
+
+
+def _remember(tag: str, line: str) -> None:
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    with _recent_lock:
+        _RECENT.append(f"{stamp} {tag}: {line}")
+
+
+def _recent(tag: str | None = None) -> str:
+    with _recent_lock:
+        lines = list(_RECENT)
+    if tag:
+        lines = [ln for ln in lines if ln.split(" ", 2)[1:2] == [f"{tag}:"]]
+    return "\n".join(lines)
+
+
+def _relay(name: str, stream) -> None:
+    out = sys.__stdout__
+    for raw in iter(stream.readline, b""):
+        line = raw.decode("utf-8", "replace").rstrip("\n")
+        _remember(name, line)
+        try:
+            out.write(f"{name}: {line}\n")
+            out.flush()
+        except Exception:
+            pass
+
+
+class _Tee:
+    """sys.stdout/sys.stderr that also keeps each whole line in _RECENT."""
+
+    def __init__(self, stream, tag: str):
+        self._stream, self._tag, self._part = stream, tag, ""
+
+    def write(self, text: str) -> int:
+        self._stream.write(text)
+        self._part += text
+        *whole, self._part = self._part.split("\n")
+        for line in whole:
+            _remember(self._tag, line)
+        return len(text)
+
+    def flush(self) -> None:
+        self._stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
 
 _ACCESS_RE = re.compile(r'"(?:GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS) [^"]*"\s+(?:200|204|304)\b')
@@ -661,7 +729,7 @@ def build_body() -> Body:
 
         return await asyncio.to_thread(work)
 
-    @body.action("logs", "Read this machine's journal.",
+    @body.action("logs", "Read this workshop's logs (its robots' too).",
                  {"name": {"type": "string"},
                   "unit": {"type": "string"},
                   "lines": {"type": "integer"},
@@ -676,6 +744,11 @@ def build_body() -> Body:
         read = count * 5 if quiet else count
 
         def work() -> str:
+            if not _journal():
+                text = _recent(name or None)
+                if quiet:
+                    text = _quiet_filter(text)
+                return "\n".join(text.splitlines()[-count:])
             args = ["journalctl", "-n", str(read), "-o", "short-iso",
                     "--no-pager", "-q"]
             if name:
@@ -959,6 +1032,9 @@ def _draft_approve(draft: str, hash: str) -> str:
 def main() -> None:
     import logging
 
+    if not _journal():  # keep our own record for "logs" (before logging takes stderr)
+        sys.stdout = _Tee(sys.stdout, "workshop")
+        sys.stderr = _Tee(sys.stderr, "workshop")
     logging.basicConfig(format="%(asctime)s %(name)s %(message)s",
                         level=logging.INFO)
     body = build_body()
