@@ -42,7 +42,7 @@ Here's a few things you can expect if you're running Ponki and start adding devi
 - **Robots move on, they aren't deleted.** A retired robot's soul, memories and photos are kept, its housemates
   are told, and it can come home again.
 
- The containarized Ponki setup comes with 2 virtual devices (Pip, and a lamp you can add via the builder) which you can use to get a feel for the system. All you need is Docker - [Try it](#try-it).
+The containerized Ponki setup comes with 2 virtual devices (Pip, and a lamp you can add via the builder) which you can use to get a feel for the system. All you need is Docker - [Try it](#try-it).
 
 ## Screenshots
 
@@ -125,7 +125,7 @@ declares. Adding a new kind of device means one family module and its driver; th
 
 ## The home setup Ponki was built on
 
-This is simply what i had running at home, and I hope it shows that Ponki doesn't need much to run on. The components allow for flexible setups, and resilience is baked in - details below.
+This is simply what I had running at home, and I hope it shows that Ponki doesn't need much to run on. The components allow for flexible setups, and resilience is baked in - details below.
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 720}}}%%
