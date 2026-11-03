@@ -7,8 +7,8 @@
 
 The house is the hub (http://localhost:8200), a workshop with the virtual
 desk that also looks for real devices, and each service that has its own
-.venv: finding (services/sam), the voice (services/voice), the ears
-(services/ears). Settings come from .env; whatever is already in the
+.venv: finding (services/sam), the voice (services/voice), and the ears (services/ears,
+which run from Ponki's own .venv if they have none). Settings come from .env; whatever is already in the
 environment wins. Everything runs in the foreground, its lines tagged with
 where they came from, and Ctrl-C stops it all. If one part stops, the rest
 stop too, so nothing is left half running.
@@ -68,6 +68,8 @@ def plan(args, env: dict) -> list[tuple[str, list[str], dict, Path]]:
         hub_env.pop("HOUSE_BODY_PORT", None)
     for name, (folder, default_port, setting) in SERVICES.items():
         venv = REPO / folder / ".venv" / "bin" / "python"
+        if name == "ears" and not venv.exists():
+            venv = Path(venv_python)  # the ears need nothing Ponki's own .venv lacks
         if not venv.exists():
             if name == "voice":
                 hub_env["HOUSE_VOICE_OPTIONAL"] = "on"  # off, not broken

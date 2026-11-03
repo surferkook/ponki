@@ -64,7 +64,7 @@ Click a picture to see it full size.
 | Every soul's mind, the floor moderator, a new robot's first personality | **Muse Spark 1.3** | `hub/soul.py` · `hub/house.py` |
 | The builder that guides *Add a robot* | **Muse Wonder 1.0** | `hub/builder.py` |
 | Finding things in a photo (`locate`) and following them through a clip (`watch`) | **SAM 3.1** | `services/sam/` |
-| What the house mic hears | **Muse Voice Transcribe 1.0** | `services/ears/` |
+| What you say with *Hold to talk* (your browser's mic, or a house mic) | **Muse Voice Transcribe 1.0** | `services/ears/` |
 | The house voice, for robots without a speaker of their own | **MMS-TTS** (open weights, run locally) | `services/voice/` |
 | Robot portraits, and pictures a robot draws for you (`draw`) | **Muse Image 1.0** | `hub/portrait.py` |
 | Answers from a live web search (`look_up`) | **Muse Spark + Meta web search** | `hub/lookup.py` |
@@ -300,11 +300,13 @@ Open **http://localhost:8200**. The house already has someone in it:
 
 1. **Meet Pip**, a camera on a virtual desk. Open Pip, and on the Talk tab ask *"Hi Pip! Can you find the orange
    and the rubber duck?"* Pip looks, finds them with SAM 3.1, and turns to search when something isn't in view.
-2. **Add a robot.** A virtual desk lamp is waiting in the workshop. The builder (Muse Wonder) walks you through
+2. **Talk to Pip.** Hold **Hold to talk** and say *"Pip, what's on the desk?"* With no house mic, it's your
+   browser's mic (allow it the first time); Muse Voice Transcribe turns it into text.
+3. **Add a robot.** A virtual desk lamp is waiting in the workshop. The builder (Muse Wonder) walks you through
    finding it, checking it and giving it a soul: a persona, a portrait and a voice.
-3. **Watch them work together.** Ask Pip *"Ask the lamp to glow blue, then check with your own eyes."* Pip asks the
+4. **Watch them work together.** Ask Pip *"Ask the lamp to glow blue, then check with your own eyes."* Pip asks the
    lamp, the lamp changes colour, and Pip takes a photo to make sure.
-4. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
+5. **Look under the hood.** Each robot's Stats tab shows what it has spent. System → Logs → API calls shows every
    call to Muse and SAM.
 
 To hear the robots, add the house voice (Meta MMS-TTS, about 1.4 GB more) and switch on **Hear it here** in the

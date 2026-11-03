@@ -78,7 +78,8 @@ make_venv() {  # folder, requirement files...
 }
 
 step "Ponki's packages (.venv)"
-make_venv .venv requirements.txt
+# bodies/onvif's too: PyAV and OpenCV, for a workshop's cameras and USB mics
+make_venv .venv requirements.txt bodies/onvif/requirements.txt
 say "ok"
 
 SAM=no

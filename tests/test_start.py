@@ -30,7 +30,7 @@ class Plan(unittest.TestCase):
 
     def test_the_house_stays_on_this_machine(self):
         plan = start.plan(args(), {"HOUSE_BODY_PORT": "8210"})
-        self.assertEqual(tags(plan), ["hub", "finding", "workshop"])
+        self.assertEqual(tags(plan), ["hub", "finding", "ears", "workshop"])
         hub_env = plan[0][2]
         self.assertEqual(hub_env["HOUSE_HOST"], "127.0.0.1")
         self.assertNotIn("HOUSE_BODY_PORT", hub_env)
@@ -42,11 +42,16 @@ class Plan(unittest.TestCase):
         self.assertEqual(hub_env["PONKI_BODY_BIND"], "0.0.0.0")  # so a weak token stops it
 
     def test_services_without_a_venv_are_off_not_broken(self):
-        plan = start.plan(args(), {"HOUSE_EARS_URL": "http://127.0.0.1:8203"})
+        plan = start.plan(args(), {})
         hub_env = plan[0][2]
         self.assertEqual(hub_env["HOUSE_VOICE_OPTIONAL"], "on")
-        self.assertEqual(hub_env["HOUSE_EARS_URL"], "off")
         self.assertEqual(hub_env["HOUSE_SAM_URL"], "http://127.0.0.1:8201")
+
+    def test_the_ears_run_from_ponkis_own_venv(self):
+        plan = start.plan(args(), {})
+        ears = next(p for p in plan if p[0] == "ears")
+        self.assertEqual(ears[1][0], str(start.REPO / ".venv" / "bin" / "python"))
+        self.assertEqual(plan[0][2]["HOUSE_EARS_URL"], "http://127.0.0.1:8203")
 
     def test_the_house_workshop_has_the_desk_and_finds_its_hub(self):
         plan = start.plan(args(), {"HOUSE_PORT": "8300", "HOUSE_HUB": "ws://192.0.2.7:8200"})

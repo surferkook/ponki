@@ -520,6 +520,23 @@ def create_app(data_dir: Path | None = None, token: str | None = None) -> FastAP
                 "language": heard.get("language"), "seconds": heard.get("seconds"),
                 "ms": heard.get("ms"), "engine": heard.get("engine")}
 
+    @app.post("/api/hear")
+    async def hear(payload: dict):
+        """Hold to talk with this browser's mic: a 16-bit mono WAV, base64."""
+        audio = str(payload.get("audio") or "")
+        if not audio:
+            raise HTTPException(400, "no audio")
+        if len(audio) > 4_000_000:  # about two minutes at 16 kHz
+            raise HTTPException(413, "that's too long: hold to talk for a sentence or two")
+        heard = await house.heard_audio(
+            "browser", audio, float(payload.get("seconds") or 0),
+            to=payload.get("to"), push=True)
+        if heard.get("error"):
+            raise HTTPException(502, heard["error"])
+        return {"text": heard.get("text", ""), "to": heard.get("to"),
+                "language": heard.get("language"), "seconds": heard.get("seconds"),
+                "ms": heard.get("ms"), "engine": heard.get("engine")}
+
     @app.get("/api/system")
     async def system():
         workshops = []

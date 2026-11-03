@@ -86,14 +86,15 @@ def main() -> int:
         check(bool(info.get("key")), "the house has a Meta API key")
 
     services = system["services"]
-    check(services["ears"]["state"] == "off", "ears are off (a container has no house mic)",
-          services["ears"]["state"])
-    if info.get("key"):
-        check(services["finding"]["ready"], "finding (SAM 3.1) is ready", services["finding"]["state"])
-    else:
-        check(services["finding"]["state"] == "error"
-              and "META_API_KEY" in (services["finding"]["detail"] or ""),
-              "finding says it needs the API key", json.dumps(services["finding"]))
+    for name, what in (("finding", "finding (SAM 3.1)"), ("ears", "the ears (Muse Voice Transcribe)")):
+        if info.get("key"):
+            wait(f"{what} is ready",
+                 lambda name=name: call(hub, "/api/system")[1]["services"][name]["ready"], args.wait)
+        else:
+            def needs_key(name=name):
+                svc = call(hub, "/api/system")[1]["services"][name]
+                return svc["state"] == "error" and "META_API_KEY" in (svc["detail"] or "")
+            wait(f"{what} says it needs the API key", needs_key, args.wait)
     if args.voice:
         wait("the voice is ready", lambda: call(hub, "/api/system")[1]["services"]["voice"]["ready"],
              args.wait * 2, every=5)
