@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href="https://youtu.be/J4FiSAGElIE"><b>▶ Watch the demo</b></a><br>
+  Disclosure: The robot voices in the demo video use Piper and Kokoro under the hood. The project has been refactored since, and now uses Meta MMS TTS.
+  
   Ponki was designed for the Meta Global AI Developer Hackathon.<br>
   Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
@@ -329,8 +331,7 @@ docker compose --profile voice pull
 docker compose --profile voice up
 ```
 
-Note: Please do not expect a convincing frontier TTS model performance from MMS-TTS. The demo video was recorded
-before the switch to MMS-TTS: some voices in it are Piper and Kokoro.
+Note: Please do not expect a convincing frontier TTS model performance from MMS-TTS.
 
 `docker compose down -v` forgets everything, and the next start is a first run again. To build the images from
 your checkout instead of pulling them, add `--build` to `up`.
