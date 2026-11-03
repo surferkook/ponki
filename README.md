@@ -8,7 +8,7 @@
 
 <p align="center">
   <!-- <a href="https://youtu.be/TODO"><b>▶ Watch the demo</b></a> · -->
-  Ponki was designed for the Meta Global AI Developer Hackathon ·
+  Ponki was designed for the Meta Global AI Developer Hackathon.<br>
   Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
 
@@ -25,7 +25,7 @@ hardware, and it comes back as itself.
 
 ## What it's like with real robots
 
-From a house with real hardware. With Docker you meet Pip and a desk lamp on a virtual desk: [Try it](#try-it).
+Here's a few things you can expect if you're running Ponki and start adding devices:
 
 > *"Vroom, the chessboard is way behind you at the far end! Turn about 160 degrees to your left and roll 50 centimetres, then I'll check!"*
 > Keiki, the camera, guiding the rover across the table
@@ -41,6 +41,8 @@ From a house with real hardware. With Docker you meet Pip and a desk lamp on a v
   every part with you and gives it a soul. A kind of device the house already knows needs no code.
 - **Robots move on, they aren't deleted.** A retired robot's soul, memories and photos are kept, its housemates
   are told, and it can come home again.
+
+ The containarized Ponki setup comes with 2 virtual devices (Pip, and a lamp you can add via the builder) which you can use to get a feel for the system. All you need is Docker - [Try it](#try-it).
 
 ## Screenshots
 
@@ -121,7 +123,9 @@ Blue is the house, amber is the only code that knows about devices, grey is the 
 and actions. A soul's tools are generated from its body's manifest, so a robot can only do what its body
 declares. Adding a new kind of device means one family module and its driver; the hub doesn't change.
 
-## What runs where
+## The home setup Ponki was built on
+
+This is simply what i had running at home, and I hope it shows that Ponki doesn't need much to run on. The components allow for flexible setups, and resilience is baked in - details below.
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 720}}}%%
