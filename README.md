@@ -8,7 +8,7 @@
 
 <p align="center">
   <!-- <a href="https://youtu.be/TODO"><b>▶ Watch the demo</b></a> · -->
-  Meta Global AI Developer Hackathon, Indie track ·
+  Ponki was designed for the Meta Global AI Developer Hackathon ·
   Built with Muse Spark, with <a href="#metas-models-one-per-job">Meta models</a> under the hood
 </p>
 
@@ -73,7 +73,7 @@ Click a picture to see it full size.
 
 Every model Ponki calls at runtime is a Meta model. Everything but the house voice goes through Meta's Model API
 behind one provider interface, and each call is written to an API log with its tokens and cost, so you can see
-what every robot spends.
+what every robot spends. The logs can be found in the System section of the Ponki web ui.
 
 ## Who is what
 
@@ -322,6 +322,8 @@ sidebar:
 docker compose --profile voice pull
 docker compose --profile voice up
 ```
+
+Note: Please do not expect a convincing frontier TTS model performance from MMS-TTS.
 
 `docker compose down -v` forgets everything, and the next start is a first run again. To build the images from
 your checkout instead of pulling them, add `--build` to `up`.
