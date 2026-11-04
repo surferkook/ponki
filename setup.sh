@@ -171,7 +171,7 @@ if [ "$MODE" = house ]; then
     if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 \
        && node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit((a === 20 && b >= 17) || (a === 22 && b >= 9) || a > 22 ? 0 : 1)'; then
         make_venv services/sam/.venv services/sam/requirements.txt
-        (cd services/sam/js && npm ci --omit=dev --no-audit --no-fund --loglevel=error) \
+        (cd services/sam/js && npm ci --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error) \
             || die "installing the mask decoder (npm) failed (see above)"
         SAM=yes
         say "ok"
