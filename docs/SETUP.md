@@ -108,9 +108,19 @@ looks for real devices, the ears, and each service with a `.venv` of its
 own: finding, and the voice when it has its venv. `--lan` (or `PONKI_LAN=on`) opens
 the UI and the door for robots (:8210) to your network, and the hub won't
 start with a weak token (the browser's mic needs localhost or https, so
-from other machines *Hold to talk* wants a TLS front such as Tailscale
-Serve, below). `--workshop` runs only a workshop. Settings come
-from `.env`, and the environment wins.
+from other machines *Hold to talk* wants https, see below). `--workshop`
+runs only a workshop. Settings come from `.env`, and the environment wins.
+
+> **If you use Tailscale**, you can expose the web UI over https on your
+> tailnet, which also lets *Hold to talk* use the mic of the browser you
+> open it in:
+>
+> ```bash
+> sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
+> ```
+>
+> then open `https://<this-machine>.<your-tailnet>.ts.net:8445/`. Any https
+> proxy you already run (Caddy, nginx) does the same.
 
 ## The hub by hand, and a test robot
 
@@ -260,16 +270,6 @@ the venvs, and asks before deleting the house (`data/`) and `.env` (with
 `--yes` it keeps both).
 
 On macOS, start it with `.venv/bin/python tools/start.py`.
-
-To reach the house from your other devices over https (so *Hold to talk*
-can use their browser mic too), Tailscale Serve fronts it:
-
-```bash
-sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
-```
-
-Then open `https://<this-machine>.<your-tailnet>.ts.net:8445/` from any
-device on your tailnet.
 
 **A house split into parts.** `deploy/` also has one unit per part
 (`ponkihouse-hub`, `-sam`, `-ears`, `-voice`, `-workshop` and the Pi's
