@@ -123,9 +123,29 @@ jobs:
           pkill -INT -f tools/start.py
           for _ in $(seq 20); do pgrep -f 'hub.serve|workshop.py|sam_server' >/dev/null || exit 0; sleep 1; done
           pgrep -fl 'hub.serve|workshop.py|sam_server'; exit 1
+      - name: As a service that starts with the machine (systemd)
+        if: runner.os == 'Linux'
+        run: |
+          ./setup.sh --yes --service --lan   # PONKI_LAN=on: the door for robots, through the service
+          systemctl is-enabled ponki
+          python3 tools/smoke.py --wait 120
+          sudo systemctl restart ponki
+          python3 tools/smoke.py --wait 120
+      - name: --teardown takes it down, and keeps the house
+        if: runner.os == 'Linux'
+        run: |
+          ./setup.sh --teardown --yes
+          test ! -e /etc/systemd/system/ponki.service
+          ! systemctl is-active --quiet ponki
+          test ! -e .venv && test ! -e services/sam/.venv
+          test -e data/registry.json && test -e .env
+          for _ in $(seq 25); do pgrep -f 'hub.serve|workshop.py|sam_server' >/dev/null || exit 0; sleep 1; done
+          pgrep -fl 'hub.serve|workshop.py|sam_server'; exit 1
       - name: Logs
         if: always()
-        run: tail -n 100 house.log "$RUNNER_TEMP/far/far.log" || true
+        run: |
+          tail -n 100 house.log "$RUNNER_TEMP/far/far.log" || true
+          if [ "$RUNNER_OS" = Linux ]; then sudo journalctl -u ponki --no-pager -n 100 || true; fi
 
   docker:
     name: Docker (${{ matrix.arch }})

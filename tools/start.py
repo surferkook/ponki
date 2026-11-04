@@ -3,6 +3,7 @@
     .venv/bin/python tools/start.py              the house, on this machine only
     .venv/bin/python tools/start.py --lan        the house, with the door for robots
                                                  (:8210) open to your network
+                                                 (PONKI_LAN=on in .env does the same)
     .venv/bin/python tools/start.py --workshop   only a workshop, for a house elsewhere
 
 The house is the hub (http://localhost:8200), a workshop with the virtual
@@ -13,8 +14,8 @@ environment wins. Everything runs in the foreground, its lines tagged with
 where they came from, and Ctrl-C stops it all. If one part stops, the rest
 stop too, so nothing is left half running.
 
-For a house that starts with the machine, see "Run it as a service" in
-docs/SETUP.md.
+For a house that starts with the machine, ./setup.sh --service installs
+this as a systemd service on Linux (ponki, or ponki-workshop).
 """
 from __future__ import annotations
 
@@ -89,6 +90,11 @@ def plan(args, env: dict) -> list[tuple[str, list[str], dict, Path]]:
     return out
 
 
+def lan_from(env: dict) -> bool:
+    """PONKI_LAN=on in .env (setup.sh --lan): the same as --lan."""
+    return str(env.get("PONKI_LAN") or "").strip().lower() in ("on", "yes", "true", "1")
+
+
 def relay(tag: str, stream) -> None:
     width = 8
     for line in iter(stream.readline, b""):
@@ -123,6 +129,8 @@ def main() -> int:
         print("No .venv here yet: run ./setup.sh first.", file=sys.stderr)
         return 1
     env = settings()
+    if not args.workshop and lan_from(env):
+        args.lan = True
     if args.workshop and env.get("HOUSE_HUB", "ws://192.0.2.7:8200") == "ws://192.0.2.7:8200":
         print("Set HOUSE_HUB in .env to the house's door for robots (./setup.sh --workshop asks).",
               file=sys.stderr)

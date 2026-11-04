@@ -83,8 +83,17 @@ it running, see [Run it as a service](#run-it-as-a-service).
 
 ## Without Docker: setup.sh and start.py
 
-`./setup.sh` (macOS or Linux, Python 3.10 to 3.13) makes `.venv` and, with
-Node.js 20.17+, `services/sam/.venv`; creates `.env` from `.env.example`
+`./setup.sh` (macOS or Linux, Python 3.10 to 3.13) first asks what this
+machine runs: the whole house (the default) or only a workshop; for the
+house, whether to add the voice and whether to open it to your network
+(`PONKI_LAN=on` in `.env`); and on Linux, whether to start Ponki with the
+machine ([Run it as a service](#run-it-as-a-service)). The same choices are
+flags: `--house` or `--workshop`, `--voice`, `--lan`, `--service` or
+`--no-service`; `--yes` asks nothing and takes the defaults (the house, no
+voice, this machine only, no service). `--teardown` undoes it
+([Run it as a service](#run-it-as-a-service)). Then it makes `.venv` and, with
+Node.js 20.17+, `services/sam/.venv` (and `services/voice/.venv` with the
+voice); creates `.env` from `.env.example`
 unless there is one (mode 600); asks for `META_API_KEY` (not echoed) and
 `HOUSE_HUMAN`; and, while `HOUSE_TOKEN` is empty or an example value, puts
 in `secrets.token_urlsafe(32)`: 43 characters of `A-Z a-z 0-9 - _`, safe in
@@ -96,13 +105,12 @@ asks for `HOUSE_HUB` and the house's token instead; `--yes` asks nothing.
 `.venv/bin/python tools/start.py` runs the hub (this machine only, like
 Docker), a workshop named `desk-workshop` with the virtual desk that also
 looks for real devices, the ears, and each service with a `.venv` of its
-own: finding, and the voice once you've made its venv (below). `--lan` opens
+own: finding, and the voice when it has its venv. `--lan` (or `PONKI_LAN=on`) opens
 the UI and the door for robots (:8210) to your network, and the hub won't
 start with a weak token (the browser's mic needs localhost or https, so
 from other machines *Hold to talk* wants a TLS front such as Tailscale
 Serve, below). `--workshop` runs only a workshop. Settings come
-from `.env`, and the environment wins. For a house that starts with the
-machine, use the systemd units ([Run it as a service](#run-it-as-a-service)).
+from `.env`, and the environment wins.
 
 ## The hub by hand, and a test robot
 
@@ -147,8 +155,10 @@ house speakers. RoBoHoN's `voice` setting (in his config, or
 | `stream` | the house voice, on his own speaker | needs his server to offer `POST /api/play_wav` |
 | `own` | his server's own voices | Kokoro, Piper, StyleTTS2: not Meta models |
 
-The voice needs a venv of its own (PyTorch and the model, about 1 GB); the
-ears' venv is only for their systemd unit:
+The voice needs a venv of its own (PyTorch and the model, about 1 GB):
+`./setup.sh --voice` makes it, and `tools/start.py` runs the voice once it
+is there. By hand, with the per-part units below (the ears' venv is only
+for their unit):
 
 ```bash
 python3 -m venv services/voice/.venv
@@ -233,22 +243,42 @@ Tests (standard library only, no hardware, no model calls):
 
 ## Run it as a service
 
-Clone anywhere, then let the installer fill in where the repo lives — the
-unit files themselves carry no machine paths. Every unit on every machine
-is prefixed `ponkihouse-`: the hub is `ponkihouse-hub` (later
-`ponkihouse-voice`, `ponkihouse-ears`, `ponkihouse-sam`, and
-`ponkihouse-workshop` — the Pi's and the NUC's workshop are the same unit
-with a different `.env`).
+On Linux, `./setup.sh` can start Ponki with the machine (`--service`, or
+answer yes when it asks). It writes one systemd unit that runs
+`tools/start.py`, so the service runs exactly what a start by hand runs:
+`ponki` for the house, `ponki-workshop` for a machine that is only a
+workshop. It asks for your password once, for sudo, and the unit runs as
+you, from this clone, with its `.env`.
 
 ```bash
-git clone <this repo> ~/ponkihouse   # any folder works
-cd ~/ponkihouse
-./setup.sh                          # .venv, .env, a HOUSE_TOKEN, the demo house
-./deploy/install.sh                 # fills in this clone's path and your user
-sudo systemctl enable --now ponkihouse-hub
+journalctl -u ponki -f                     # its lines, tagged hub, finding, ears, workshop
+sudo systemctl restart ponki               # after editing .env
+```
+
+`./setup.sh --teardown` undoes it all: it stops and removes the service and
+the venvs, and asks before deleting the house (`data/`) and `.env` (with
+`--yes` it keeps both).
+
+On macOS, start it with `.venv/bin/python tools/start.py`.
+
+To reach the house from your other devices over https (so *Hold to talk*
+can use their browser mic too), Tailscale Serve fronts it:
+
+```bash
 sudo tailscale serve --bg --https=8445 http://127.0.0.1:8200
 ```
 
 Then open `https://<this-machine>.<your-tailnet>.ts.net:8445/` from any
-device on your tailnet. It's https, so *Hold to talk* can use that device's
-browser mic too.
+device on your tailnet.
+
+**A house split into parts.** `deploy/` also has one unit per part
+(`ponkihouse-hub`, `-sam`, `-ears`, `-voice`, `-workshop` and the Pi's
+fixtures), for a house whose parts run and restart on their own, the way
+the reference home runs. Its installer fills in where the repo lives and
+who runs it:
+
+```bash
+./deploy/install.sh ponkihouse-hub ponkihouse-sam ponkihouse-workshop
+sudo systemctl enable --now ponkihouse-hub ponkihouse-sam ponkihouse-workshop
+```
+
