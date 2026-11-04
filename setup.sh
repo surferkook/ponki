@@ -75,6 +75,35 @@ if [ "$(uname -s)" = Linux ] && command -v systemctl >/dev/null 2>&1 \
     HAS_SYSTEMD=yes
 fi
 
+# -- Python 3.10 to 3.13 -----------------------------------------------------------
+
+step "Python"
+PYTHON=
+for candidate in ${PONKI_PYTHON:-} python3 python3.12 python3.11 python3.13 python3.10; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys; sys.exit(0 if (3, 10) <= sys.version_info[:2] <= (3, 13) else 1)' \
+            >/dev/null 2>&1; then
+        PYTHON=$(command -v "$candidate")
+        break
+    fi
+done
+if [ -z "$PYTHON" ]; then
+    found=$(python3 --version 2>/dev/null || echo "no python3")
+    case $(uname -s) in
+        Darwin) hint="brew install python@3.12   (https://brew.sh), then run ./setup.sh again" ;;
+        *) hint="install python3.12 and python3.12-venv with your package manager, then run ./setup.sh again" ;;
+    esac
+    die "Ponki needs Python 3.10 to 3.13 (found: $found).
+  $hint
+  Or point at one: PONKI_PYTHON=/path/to/python3.12 ./setup.sh"
+fi
+say "using $PYTHON ($("$PYTHON" --version 2>&1))"
+if ! "$PYTHON" -c 'import ensurepip, venv' >/dev/null 2>&1; then
+    die "$PYTHON can't make virtual environments yet.
+  On Debian or Ubuntu: sudo apt install python3-venv (or python3.X-venv for your version),
+  then run ./setup.sh again"
+fi
+
 # -- what this machine runs ----------------------------------------------------------
 
 if [ -z "$MODE" ]; then
@@ -113,30 +142,6 @@ if [ "$SERVICE" = yes ] && [ "$HAS_SYSTEMD" = no ]; then
     say "No systemd here: Ponki won't be installed as a service (start it with tools/start.py)."
     SERVICE=no
 fi
-
-# -- Python 3.10 to 3.13 -----------------------------------------------------------
-
-step "Python"
-PYTHON=
-for candidate in ${PONKI_PYTHON:-} python3 python3.12 python3.11 python3.13 python3.10; do
-    command -v "$candidate" >/dev/null 2>&1 || continue
-    if "$candidate" -c 'import sys; sys.exit(0 if (3, 10) <= sys.version_info[:2] <= (3, 13) else 1)' \
-            >/dev/null 2>&1; then
-        PYTHON=$(command -v "$candidate")
-        break
-    fi
-done
-if [ -z "$PYTHON" ]; then
-    found=$(python3 --version 2>/dev/null || echo "no python3")
-    case $(uname -s) in
-        Darwin) hint="brew install python@3.12   (https://brew.sh), then run ./setup.sh again" ;;
-        *) hint="install python3.12 and python3.12-venv with your package manager, then run ./setup.sh again" ;;
-    esac
-    die "Ponki needs Python 3.10 to 3.13 (found: $found).
-  $hint
-  Or point at one: PONKI_PYTHON=/path/to/python3.12 ./setup.sh"
-fi
-say "using $PYTHON ($("$PYTHON" --version 2>&1))"
 
 make_venv() {  # folder, requirement files...
     venv=$1
