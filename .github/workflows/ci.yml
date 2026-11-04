@@ -126,7 +126,7 @@ jobs:
       - name: As a service that starts with the machine (systemd)
         if: runner.os == 'Linux'
         run: |
-          ./setup.sh --yes --service
+          ./setup.sh --yes --service --lan   # PONKI_LAN=on: the door for robots, through the service
           systemctl is-enabled ponki
           python3 tools/smoke.py --wait 120
           sudo systemctl restart ponki
