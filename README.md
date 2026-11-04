@@ -354,8 +354,7 @@ git clone https://github.com/surferkook/ponki.git && cd ponki
 ```
 
 `setup.sh` asks what this machine runs, and the default is the whole house on one machine: the hub, finding, the
-ears and a workshop with the same virtual desk as in Docker, which also looks for real devices (Arduinos on USB,
-cameras and RoBoHoN on the network, the rover). It can add the house voice, open the house to your network for
+ears and a workshop with the same virtual desk as in Docker, which also looks for real devices. It can add the house voice, open the house to your network for
 other machines, and on Linux start Ponki with the machine as a systemd service. Then open http://localhost:8200.
 Without the service, `.venv/bin/python tools/start.py` starts the house and Ctrl-C stops it. Running `setup.sh`
 again is safe: it keeps your `.env` and your house, and `./setup.sh --teardown` takes it all down again.
@@ -363,10 +362,6 @@ again is safe: it keeps your `.env` and your house, and `./setup.sh --teardown` 
 To add a machine with devices to a house running elsewhere (natively or in Docker), run `./setup.sh` there and
 choose *Only a workshop*. Each family's own setup (an Arduino's firmware, a camera's account), the door for robots
 and Docker's side of it are in [docs/SETUP.md](docs/SETUP.md).
-
-```bash
-.venv/bin/python -m unittest discover -s tests    # 251 tests, about 35 s: no hardware, network or model calls
-```
 
 ## How it was built
 
