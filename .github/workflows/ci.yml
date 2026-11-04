@@ -131,7 +131,14 @@ jobs:
           python3 tools/smoke.py --wait 120
           sudo systemctl restart ponki
           python3 tools/smoke.py --wait 120
-          sudo systemctl stop ponki
+      - name: --teardown takes it down, and keeps the house
+        if: runner.os == 'Linux'
+        run: |
+          ./setup.sh --teardown --yes
+          test ! -e /etc/systemd/system/ponki.service
+          ! systemctl is-active --quiet ponki
+          test ! -e .venv && test ! -e services/sam/.venv
+          test -e data/registry.json && test -e .env
           for _ in $(seq 25); do pgrep -f 'hub.serve|workshop.py|sam_server' >/dev/null || exit 0; sleep 1; done
           pgrep -fl 'hub.serve|workshop.py|sam_server'; exit 1
       - name: Logs

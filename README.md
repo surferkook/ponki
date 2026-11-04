@@ -358,7 +358,7 @@ ears and a workshop with the same virtual desk as in Docker, which also looks fo
 cameras and RoBoHoN on the network, the rover). It can add the house voice, open the house to your network for
 other machines, and on Linux start Ponki with the machine as a systemd service. Then open http://localhost:8200.
 Without the service, `.venv/bin/python tools/start.py` starts the house and Ctrl-C stops it. Running `setup.sh`
-again is safe: it keeps your `.env` and your house.
+again is safe: it keeps your `.env` and your house, and `./setup.sh --teardown` takes it all down again.
 
 To add a machine with devices to a house running elsewhere (natively or in Docker), run `./setup.sh` there and
 choose *Only a workshop*. Each family's own setup (an Arduino's firmware, a camera's account), the door for robots

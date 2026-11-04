@@ -90,7 +90,8 @@ house, whether to add the voice and whether to open it to your network
 machine ([Run it as a service](#run-it-as-a-service)). The same choices are
 flags: `--house` or `--workshop`, `--voice`, `--lan`, `--service` or
 `--no-service`; `--yes` asks nothing and takes the defaults (the house, no
-voice, this machine only, no service). Then it makes `.venv` and, with
+voice, this machine only, no service). `--teardown` undoes it
+([Run it as a service](#run-it-as-a-service)). Then it makes `.venv` and, with
 Node.js 20.17+, `services/sam/.venv` (and `services/voice/.venv` with the
 voice); creates `.env` from `.env.example`
 unless there is one (mode 600); asks for `META_API_KEY` (not echoed) and
@@ -252,8 +253,11 @@ you, from this clone, with its `.env`.
 ```bash
 journalctl -u ponki -f                     # its lines, tagged hub, finding, ears, workshop
 sudo systemctl restart ponki               # after editing .env
-sudo systemctl disable --now ponki && sudo rm /etc/systemd/system/ponki.service   # remove it
 ```
+
+`./setup.sh --teardown` undoes it all: it stops and removes the service and
+the venvs, and asks before deleting the house (`data/`) and `.env` (with
+`--yes` it keeps both).
 
 On macOS, start it with `.venv/bin/python tools/start.py`.
 

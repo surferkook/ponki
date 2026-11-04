@@ -12,6 +12,9 @@
 #   --service                start Ponki with the machine (Linux: systemd, sudo)
 #   --no-service             don't (the default with --yes)
 #   ./setup.sh --yes         ask nothing (fill in .env yourself afterwards)
+#   ./setup.sh --teardown    undo it: stop and remove the service, remove the
+#                            venvs; asks before deleting the house (data/) and
+#                            .env (with --yes it keeps them)
 #
 # It makes .venv (and services/sam/.venv, services/voice/.venv), creates
 # .env from .env.example if there isn't one, asks for the few settings that
@@ -42,7 +45,8 @@ for arg in "$@"; do
         --service) SERVICE=yes ;;
         --no-service) SERVICE=no ;;
         --yes|-y) ASK=no ;;
-        -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --teardown) MODE=teardown ;;
+        -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
     esac
 done
@@ -73,6 +77,54 @@ HAS_SYSTEMD=no
 if [ "$(uname -s)" = Linux ] && command -v systemctl >/dev/null 2>&1 \
         && [ -d /run/systemd/system ]; then
     HAS_SYSTEMD=yes
+fi
+
+# -- teardown -----------------------------------------------------------------------
+
+if [ "$MODE" = teardown ]; then
+    step "Taking Ponki down on this machine ($ROOT)"
+    if [ "$(uname -s)" = Linux ] && command -v systemctl >/dev/null 2>&1; then
+        for unit in ponki ponki-workshop; do
+            if [ -e "/etc/systemd/system/$unit.service" ]; then
+                say "stopping and removing $unit.service (sudo may ask for your password)"
+                sudo systemctl disable --now "$unit" >/dev/null 2>&1 || true
+                sudo rm -f "/etc/systemd/system/$unit.service"
+                gone=yes
+            fi
+        done
+        [ "${gone:-}" = yes ] && sudo systemctl daemon-reload
+        [ "${gone:-}" = yes ] || say "no Ponki service installed"
+    fi
+    for pid in $(pgrep -f 'tools/start.py' 2>/dev/null); do  # one started by hand, from here
+        cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null \
+              || lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        if [ "$cwd" = "$ROOT" ]; then
+            say "tools/start.py is still running from here (pid $pid): Ctrl-C it in its terminal"
+        fi
+    done
+    for path in .venv services/sam/.venv services/voice/.venv services/ears/.venv services/sam/js/node_modules; do
+        if [ -e "$path" ]; then rm -rf "$path"; say "removed $path"; fi
+    done
+    keep_house=yes
+    if [ -e data ]; then
+        if [ "$ASK" = yes ]; then
+            [ "$(yes_no "Delete the house too (data/: every robot's soul, memories and photos; there is no undo)? [y/N] " no)" = yes ] \
+                && keep_house=no
+        fi
+        if [ "$keep_house" = no ]; then rm -rf data; say "removed data/"
+        else say "kept the house in data/"; fi
+    fi
+    if [ -e .env ]; then
+        if [ "$ASK" = yes ] && [ "$(yes_no "Delete .env too (your API key and the house's token)? [y/N] " no)" = yes ]; then
+            rm -f .env; say "removed .env"
+        else
+            say "kept .env"
+        fi
+    fi
+    step "Done"
+    say "Ponki is taken down. What's left is this folder, with whatever you kept;"
+    say "./setup.sh sets it up again, and deleting the folder removes the rest."
+    exit 0
 fi
 
 # -- Python 3.10 to 3.13 -----------------------------------------------------------
@@ -432,7 +484,7 @@ if [ -n "$UNIT" ]; then
     say ""
     say "  its lines:   journalctl -u $UNIT -f"
     say "  stop/start:  sudo systemctl stop $UNIT / sudo systemctl start $UNIT"
-    say "  remove it:   sudo systemctl disable --now $UNIT && sudo rm /etc/systemd/system/$UNIT.service"
+    say "  remove it:   ./setup.sh --teardown"
 fi
 if [ "$MODE" = house ]; then
     say ""
