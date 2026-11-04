@@ -1,29 +1,48 @@
 #!/bin/sh
 # Set Ponki up on this machine, without Docker (macOS or Linux).
 #
-#   ./setup.sh               the house: the hub, finding (SAM 3.1) and a workshop
+#   ./setup.sh               asks what this machine runs, then sets it up
+#   ./setup.sh --house       the whole house: the hub, finding (SAM 3.1), the
+#                            ears and a workshop with the virtual desk
 #   ./setup.sh --workshop    only a workshop, for a machine with devices that
 #                            joins a house running somewhere else
+#   --voice                  add the house voice (Meta MMS-TTS, about 1 GB)
+#   --lan                    open the house to your network (other machines'
+#                            workshops, the web UI from other devices)
+#   --service                start Ponki with the machine (Linux: systemd, sudo)
+#   --no-service             don't (the default with --yes)
 #   ./setup.sh --yes         ask nothing (fill in .env yourself afterwards)
 #
-# It makes .venv (and services/sam/.venv), creates .env from .env.example
-# if there isn't one, asks for the few settings that matter (Enter skips
-# any of them) and gives the house a long random HOUSE_TOKEN. Running it
-# again is safe: it keeps your .env and your house, and only fills in what
-# is still empty. It starts nothing and installs no system services; it
-# ends by saying how to start Ponki.
+# It makes .venv (and services/sam/.venv, services/voice/.venv), creates
+# .env from .env.example if there isn't one, asks for the few settings that
+# matter (Enter skips any of them) and gives the house a long random
+# HOUSE_TOKEN. Running it again is safe: it keeps your .env and your house,
+# and only fills in what is still empty. On Linux it can install Ponki as a
+# systemd service (ponki, or ponki-workshop); otherwise it ends by saying
+# how to start Ponki.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT"
 
-MODE=house
+MODE=
 ASK=yes
+VOICE=
+LAN=
+LAN_ASKED=no
+SERVICE=
 for arg in "$@"; do
     case $arg in
+        --house) MODE=house ;;
         --workshop) MODE=workshop ;;
+        --voice) VOICE=yes ;;
+        --no-voice) VOICE=no ;;
+        --lan) LAN=yes; LAN_ASKED=yes ;;
+        --no-lan) LAN=no; LAN_ASKED=yes ;;
+        --service) SERVICE=yes ;;
+        --no-service) SERVICE=no ;;
         --yes|-y) ASK=no ;;
-        -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
     esac
 done
@@ -35,6 +54,65 @@ trap 'exit 130' INT TERM
 say() { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
 die() { printf '\nsetup stopped: %s\n' "$*" >&2; exit 1; }
+ask() {  # prompt, then the answer on stdout ('' when skipped)
+    printf '%s' "$1" >&2
+    IFS= read -r answer || answer=
+    printf '%s' "$answer"
+}
+yes_no() {  # prompt, default (yes|no): yes or no on stdout
+    answer=$(ask "$1")
+    case $answer in
+        [Yy]*) printf yes ;;
+        [Nn]*) printf no ;;
+        *) printf '%s' "$2" ;;
+    esac
+}
+
+# systemd, to start Ponki with the machine: Linux only
+HAS_SYSTEMD=no
+if [ "$(uname -s)" = Linux ] && command -v systemctl >/dev/null 2>&1 \
+        && [ -d /run/systemd/system ]; then
+    HAS_SYSTEMD=yes
+fi
+
+# -- what this machine runs ----------------------------------------------------------
+
+if [ -z "$MODE" ]; then
+    MODE=house
+    if [ "$ASK" = yes ]; then
+        step "What should this machine run?"
+        say "  1) The whole house: the hub, finding, the ears and a workshop with the"
+        say "     virtual desk (Pip and a lamp to build). Everything on one machine."
+        say "  2) Only a workshop, for a machine with devices that joins a house"
+        say "     running on another machine."
+        case $(ask "Choose 1 or 2 [1]: ") in
+            2) MODE=workshop ;;
+        esac
+    fi
+fi
+if [ "$MODE" = house ]; then
+    if [ -z "$VOICE" ]; then
+        VOICE=no
+        [ "$ASK" = yes ] && VOICE=$(yes_no "Add the house voice, so robots without a speaker talk out loud (Meta MMS-TTS, about 1 GB)? [y/N] " no)
+    fi
+    if [ -z "$LAN" ]; then
+        LAN=no
+        [ "$ASK" = yes ] && LAN_ASKED=yes && LAN=$(yes_no "Open the house to your network? Workshops on other machines need it; the web UI has no login, so only on a network you trust. [y/N] " no)
+    fi
+else
+    VOICE=no
+    LAN=no
+fi
+if [ -z "$SERVICE" ]; then
+    SERVICE=no
+    if [ "$ASK" = yes ] && [ "$HAS_SYSTEMD" = yes ]; then
+        SERVICE=$(yes_no "Start Ponki with the machine (a systemd service; asks for your password)? [Y/n] " yes)
+    fi
+fi
+if [ "$SERVICE" = yes ] && [ "$HAS_SYSTEMD" = no ]; then
+    say "No systemd here: Ponki won't be installed as a service (start it with tools/start.py)."
+    SERVICE=no
+fi
 
 # -- Python 3.10 to 3.13 -----------------------------------------------------------
 
@@ -98,6 +176,19 @@ if [ "$MODE" = house ]; then
     fi
 fi
 
+if [ "$VOICE" = yes ]; then
+    step "The house voice: Meta MMS-TTS (services/voice/.venv, about 1 GB)"
+    req=services/voice/requirements.txt
+    if [ "$(uname -s)" = Darwin ]; then
+        # PyTorch's CPU-only build is Linux's; on a Mac the plain wheel is the CPU build
+        req=$(mktemp)
+        sed -e '/^--extra-index-url/d' -e 's/+cpu//' services/voice/requirements.txt > "$req"
+    fi
+    make_venv services/voice/.venv "$req"
+    [ "$req" = services/voice/requirements.txt ] || rm -f "$req"
+    say "ok: the model (facebook/mms-tts-eng) downloads from Hugging Face on its first start"
+fi
+
 # -- .env -------------------------------------------------------------------------
 
 step "Settings (.env)"
@@ -138,11 +229,6 @@ with os.fdopen(fd, "w", encoding="utf-8") as out:
     out.write("\n".join(lines) + "\n")
 os.replace(tmp, ".env")
 EOF
-}
-ask() {  # prompt, then the answer on stdout ('' when skipped)
-    printf '%s' "$1" >&2
-    IFS= read -r answer || answer=
-    printf '%s' "$answer"
 }
 ask_secret() {
     printf '%s' "$1" >&2
@@ -198,6 +284,18 @@ if [ "$MODE" = house ]; then
     case $(env_get HOUSE_HUB) in
         ""|ws://192.0.2.7:8200) env_set HOUSE_HUB "ws://localhost:8200" ;;
     esac
+    if [ "$LAN" = yes ]; then
+        env_set PONKI_LAN on
+        say "PONKI_LAN=on: the house opens to your network"
+    elif [ "$(env_get PONKI_LAN)" = on ]; then
+        if [ "$LAN_ASKED" = yes ]; then
+            env_set PONKI_LAN off
+            say "PONKI_LAN=off: the house stays on this machine"
+        else
+            LAN=yes
+            say "PONKI_LAN=on is kept: the house opens to your network"
+        fi
+    fi
 else
     hub=$(env_get HOUSE_HUB)
     case $hub in
@@ -241,26 +339,106 @@ if [ "$MODE" = house ]; then
     fi
 fi
 
+# -- start with the machine (systemd) ------------------------------------------------
+
+UNIT=
+if [ "$SERVICE" = yes ]; then
+    if [ "$MODE" = house ]; then
+        UNIT=ponki
+        what="the house (the hub, finding, the ears and a workshop)"
+        args=
+    else
+        UNIT=ponki-workshop
+        what="a workshop"
+        args=" --workshop"
+    fi
+    step "Start with the machine: $UNIT.service"
+    say "This writes /etc/systemd/system/$UNIT.service and starts it, so sudo"
+    say "may ask for your password."
+    tmp=$(mktemp)
+    cat > "$tmp" <<EOF
+[Unit]
+Description=Ponki: $what
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$(id -un)
+WorkingDirectory=$ROOT
+ExecStart=$ROOT/.venv/bin/python -u $ROOT/tools/start.py$args
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    if sudo install -m 644 "$tmp" "/etc/systemd/system/$UNIT.service" \
+            && sudo systemctl daemon-reload \
+            && sudo systemctl enable "$UNIT" >/dev/null 2>&1 \
+            && sudo systemctl restart "$UNIT"; then
+        rm -f "$tmp"
+        say "installed and started $UNIT.service"
+    else
+        rm -f "$tmp"
+        say "couldn't install $UNIT.service (see above); start Ponki by hand instead."
+        UNIT=
+    fi
+fi
+
 # -- done -------------------------------------------------------------------------
 
 step "Done"
 if [ -n "$TODO" ]; then
     say "Still to fill in, in .env:$TODO"
+    [ -n "$UNIT" ] && say "(then: sudo systemctl restart $UNIT)"
     say ""
 fi
-if [ "$MODE" = house ]; then
+if [ -n "$UNIT" ] && [ "$MODE" = house ]; then
+    up=no
+    for _ in $(seq 60); do
+        if .venv/bin/python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8200/api/info", timeout=2)' \
+                >/dev/null 2>&1; then up=yes; break; fi
+        sleep 1
+    done
+    if [ "$up" = yes ]; then
+        say "Ponki is running, and starts with the machine: open http://localhost:8200"
+        say "and say hi to Pip."
+    else
+        say "Ponki is starting as a service, but the hub isn't answering yet;"
+        say "see: journalctl -u $UNIT -e"
+    fi
+elif [ -n "$UNIT" ]; then
+    say "The workshop is running, and starts with the machine. It shows up under"
+    say "System → Workshops, and its devices in Add a robot."
+elif [ "$MODE" = house ]; then
     say "Start the house (Ctrl-C stops it):"
     say "  .venv/bin/python tools/start.py"
     say "then open http://localhost:8200 and say hi to Pip."
-    say ""
-    say "Workshops on other machines join with ./setup.sh --workshop there, and"
-    say "  .venv/bin/python tools/start.py --lan"
-    say "here, which opens the door for robots (:8210) to your network. Their"
-    say "HOUSE_TOKEN is the one in this .env."
 else
     say "Start the workshop (Ctrl-C stops it):"
     say "  .venv/bin/python tools/start.py --workshop"
     say "It shows up under System → Workshops, and its devices in Add a robot."
+fi
+if [ -n "$UNIT" ]; then
+    say ""
+    say "  its lines:   journalctl -u $UNIT -f"
+    say "  stop/start:  sudo systemctl stop $UNIT / sudo systemctl start $UNIT"
+    say "  remove it:   sudo systemctl disable --now $UNIT && sudo rm /etc/systemd/system/$UNIT.service"
+fi
+if [ "$MODE" = house ]; then
+    say ""
+    if [ "$LAN" = yes ]; then
+        say "The house is open to your network: workshops on other machines join"
+        say "with ./setup.sh --workshop there, through the door for robots (:8210)"
+        say "on this machine. Their HOUSE_TOKEN is the one in this .env."
+    else
+        say "Workshops on other machines need the house open to your network:"
+        say "run ./setup.sh --lan here, then ./setup.sh --workshop there."
+    fi
 fi
 say "Real devices may need a little more (an Arduino's firmware, a camera's"
 say "account): see docs/SETUP.md for each family."

@@ -291,7 +291,7 @@ firmware/pins/      the one generic Arduino sketch
 services/           sam (SAM 3.1), voice (MMS-TTS), ears (Muse Voice Transcribe)
 deploy/             systemd units, a clone-anywhere installer and the container's entrypoint
 compose.yaml        Ponki in a box: hub, finding, a workshop with the virtual desk, optional voice
-setup.sh            Ponki without Docker: the venvs, .env and its token, the demo house; --workshop for one machine
+setup.sh            Ponki without Docker: asks what the machine runs; the venvs, .env, the demo house, a service
 tools/              start.py (the house without Docker), smoke.py (what a newcomer should find), the voice check,
                     giving a stand-in workshop an account
 tests/              standard library only: no hardware, no network, no model calls
@@ -345,36 +345,24 @@ workshops on other machines mix: they dial in on a port that answers only robots
 
 ## Run it on your own machines
 
-**For real robots: the house and its workshops run natively, next to the hardware**, because USB and network
-discovery don't reach into a container. macOS or Linux, Python 3.10 to 3.13, and Node.js 20.17+ for finding:
+**For real robots: install Ponki natively, next to the hardware**, because USB and network discovery don't reach
+into a container. macOS or Linux, Python 3.10 to 3.13, and Node.js 20.17+ for finding:
 
 ```bash
 git clone https://github.com/surferkook/ponki.git && cd ponki
-./setup.sh                        # asks for your API key and first name; Enter skips either
-.venv/bin/python tools/start.py   # the house; Ctrl-C stops it
+./setup.sh
 ```
 
-`setup.sh` makes the virtual environments, creates `.env` (and never overwrites one), gives the house a long random
-`HOUSE_TOKEN` and moves Pip in. Running it again is safe. Open http://localhost:8200: it's the same house as in
-Docker, and its workshop also looks for real devices: Arduinos on USB, cameras and RoBoHoN on the network, the rover.
+`setup.sh` asks what this machine runs, and the default is the whole house on one machine: the hub, finding, the
+ears and a workshop with the same virtual desk as in Docker, which also looks for real devices (Arduinos on USB,
+cameras and RoBoHoN on the network, the rover). It can add the house voice, open the house to your network for
+other machines, and on Linux start Ponki with the machine as a systemd service. Then open http://localhost:8200.
+Without the service, `.venv/bin/python tools/start.py` starts the house and Ctrl-C stops it. Running `setup.sh`
+again is safe: it keeps your `.env` and your house.
 
-A machine with devices joins a house running elsewhere (in Docker or natively) as a workshop:
-
-```bash
-./setup.sh --workshop             # asks where the house is and for its HOUSE_TOKEN
-.venv/bin/python tools/start.py --workshop
-```
-
-The house lets it in with `tools/start.py --lan`, which opens the door for robots on :8210 to your network. In
-Docker, put `PONKI_BODY_BIND=0.0.0.0` and a long random `HOUSE_TOKEN` in `.env` (`python3 -c 'import secrets;
-print(secrets.token_urlsafe(32))'` makes one); the hub won't open the door with the example token. Each family's own setup (an Arduino's firmware, a camera's account), the
-voice, the ears and the systemd units are in [docs/SETUP.md](docs/SETUP.md).
-
-The smallest body is a fake robot that dials in by itself, with no workshop:
-
-```bash
-HOUSE_HUB=ws://localhost:8200 HOUSE_TOKEN=<the HOUSE_TOKEN in .env> .venv/bin/python bodies/sdk/example.py
-```
+To add a machine with devices to a house running elsewhere (natively or in Docker), run `./setup.sh` there and
+choose *Only a workshop*. Each family's own setup (an Arduino's firmware, a camera's account), the door for robots
+and Docker's side of it are in [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
 .venv/bin/python -m unittest discover -s tests    # 251 tests, about 35 s: no hardware, network or model calls

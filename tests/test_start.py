@@ -41,6 +41,12 @@ class Plan(unittest.TestCase):
         self.assertEqual(hub_env["HOUSE_BODY_PORT"], "8210")
         self.assertEqual(hub_env["PONKI_BODY_BIND"], "0.0.0.0")  # so a weak token stops it
 
+    def test_ponki_lan_in_env_is_the_same_as_lan(self):
+        self.assertTrue(start.lan_from({"PONKI_LAN": "on"}))
+        self.assertTrue(start.lan_from({"PONKI_LAN": " Yes "}))
+        self.assertFalse(start.lan_from({"PONKI_LAN": "off"}))
+        self.assertFalse(start.lan_from({}))
+
     def test_services_without_a_venv_are_off_not_broken(self):
         plan = start.plan(args(), {})
         hub_env = plan[0][2]
